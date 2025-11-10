@@ -12,6 +12,7 @@ class GvlCommentsList extends StatefulWidget {
 
 class _GvlCommentsListState extends State<GvlCommentsList> {
   List<CommentModel>? _comments;
+  String? _error;
   final _ctrl = TextEditingController();
   bool _loading = true;
   bool _sending = false;
@@ -23,31 +24,59 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
   }
 
   Future<void> _load() async {
-    final kit = GvlComments();
-    final list = await kit.fetchComments(widget.threadKey);
-    setState(() {
-      _comments = list;
-      _loading = false;
-    });
+    setState(() { _loading = true; _error = null; });
+    try {
+      final kit = GvlComments();
+      final list = await kit.fetchComments(widget.threadKey);
+      setState(() {
+        _comments = list;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _send() async {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
-    setState(() => _sending = true);
-    final kit = GvlComments();
-    final created = await kit.post(widget.threadKey, text);
-    setState(() {
-      _comments = [created, ..._comments ?? []];
-      _ctrl.clear();
-      _sending = false;
-    });
+    setState(() { _sending = true; _error = null; });
+    try {
+      final kit = GvlComments();
+      final created = await kit.post(widget.threadKey, text);
+      setState(() {
+        _comments = [created, ...(_comments ?? [])];
+        _ctrl.clear();
+      });
+    } catch (e) {
+      setState(() { _error = e.toString(); });
+    } finally {
+      setState(() { _sending = false; });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Erreur', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: _load, child: const Text('Réessayer')),
+          ],
+        ),
+      );
     }
 
     final comments = _comments ?? [];
@@ -88,8 +117,7 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
                 onPressed: _sending ? null : _send,
                 child: _sending
                     ? const SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: 16, height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
                     : const Text('Envoyer'),
