@@ -4,12 +4,8 @@ import 'package:gvl_comments/gvl_comments.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await GvlComments().initialize(
-    const CommentsConfig(
-      installKey: 'cmt_live_6GR78fxknl7eFxZ3rOwK344t5DwupcQW',
-      externalUserId: 'user_1',
-      externalUserName: 'Joris',
-    ),
+  await CommentsKit.initialize(
+    installKey: const String.fromEnvironment('GVL_INSTALL_KEY'),
   );
 
   runApp(const DemoApp());
@@ -24,7 +20,7 @@ class DemoApp extends StatelessWidget {
       title: 'GVL Comments Demo',
       home: Scaffold(
         appBar: AppBar(title: const Text('GVL Comments Demo')),
-        body: const GvlCommentsList(threadKey: 'demo-thread'),
+        body: const GvlCommentsList(threadKey: 'post:124'),
       ),
     );
   }

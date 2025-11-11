@@ -13,6 +13,8 @@ class CommentsConfig {
     required this.externalUserId,
     this.externalUserName,
   });
+
+
 }
 
 class CommentModel {
@@ -40,4 +42,11 @@ class CommentModel {
     body: j['body'] as String,
     createdAt: DateTime.parse(j['created_at'] as String),
   );
+}
+
+class UserProfile {
+  final String id;
+  final String? name;
+  final String? avatarUrl;
+  const UserProfile({required this.id, this.name, this.avatarUrl});
 }

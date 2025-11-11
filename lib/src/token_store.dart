@@ -2,16 +2,18 @@ class TokenStore {
   String? _token;
   DateTime? _exp;
 
-  bool get isValid =>
-      _token != null && _exp != null && DateTime.now().isBefore(_exp!);
-  String? get token => _token;
-
-  void setToken(String token, Duration ttl) {
+  void save(String token, int expiresInSec) {
     _token = token;
-    _exp = DateTime.now().add(ttl - const Duration(minutes: 5));
+    _exp = DateTime.now().add(Duration(seconds: expiresInSec - 30)); // marge 30s
   }
 
-  void clear() {
+  String? validBearer() {
+    if (_token == null || _exp == null) return null;
+    if (DateTime.now().isAfter(_exp!)) return null;
+    return _token!;
+  }
+
+  Future<void> clear() async {
     _token = null;
     _exp = null;
   }

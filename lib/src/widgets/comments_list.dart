@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../gvl_comments.dart';
-import '../models.dart';
+import 'package:gvl_comments/gvl_comments.dart';
 
 class GvlCommentsList extends StatefulWidget {
   final String threadKey;
@@ -26,8 +25,7 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final kit = GvlComments();
-      final list = await kit.fetchComments(widget.threadKey);
+      final list = await CommentsKit.I().listByThreadKey(widget.threadKey, limit: 100);
       setState(() {
         _comments = list;
         _loading = false;
@@ -43,10 +41,16 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
   Future<void> _send() async {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
+
     setState(() { _sending = true; _error = null; });
+
     try {
-      final kit = GvlComments();
-      final created = await kit.post(widget.threadKey, text);
+      // NOTE: l’utilisateur doit avoir été bind ailleurs via:
+      // await CommentsKit.I().setUser(const UserProfile(id: '...', name: '...'));
+      final created = await CommentsKit.I().post(
+        threadKey: widget.threadKey,
+        body: text,
+      );
       setState(() {
         _comments = [created, ...(_comments ?? [])];
         _ctrl.clear();
@@ -63,6 +67,7 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -79,36 +84,46 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
       );
     }
 
-    final comments = _comments ?? [];
+    final comments = _comments ?? const <CommentModel>[];
 
     return Column(
       children: [
         Expanded(
           child: ListView.separated(
-            reverse: true,
+            reverse: true, // derniers en haut si tu veux le flux "chat"
             itemCount: comments.length,
-            separatorBuilder: (_, __) => const Divider(),
+            separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
               final c = comments[i];
               return ListTile(
-                title: Text(c.authorName ?? c.externalUserId,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                dense: true,
+                title: Text(
+                  (c.authorName ?? 'Utilisateur'),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 subtitle: Text(c.body),
+                trailing: Text(
+                  _fmtTime(c.createdAt),
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
               );
             },
           ),
         ),
         const Divider(height: 1),
         Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(8),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _ctrl,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sending ? null : _send(),
                   decoration: const InputDecoration(
-                    hintText: "Ajouter un commentaire...",
+                    hintText: "Ajouter un commentaire…",
                     border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                 ),
               ),
@@ -121,11 +136,18 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
                     : const Text('Envoyer'),
-              )
+              ),
             ],
           ),
-        )
+        ),
       ],
     );
+  }
+
+  String _fmtTime(DateTime dt) {
+    // Mini format local sans intl pour l’instant
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
   }
 }

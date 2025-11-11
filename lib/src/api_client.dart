@@ -5,16 +5,33 @@ class ApiClient {
   final http.Client _http;
   ApiClient({http.Client? httpClient}) : _http = httpClient ?? http.Client();
 
-  Future<Map<String, dynamic>> postJson(Uri url, Map<String, dynamic> body,
-      {Map<String, String>? headers}) async {
+  Future<Map<String, dynamic>> postJson(
+      Uri url,
+      Map<String, dynamic> body, {
+        Map<String, String>? headers,
+      }) async {
     final res = await _http.post(
       url,
       headers: {'Content-Type': 'application/json', ...?headers},
       body: jsonEncode(body),
     );
+
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(res.body);
+
+      // ✅ Tolère les deux formats : tableau ou objet unique
+      if (decoded is List && decoded.isNotEmpty) {
+        return Map<String, dynamic>.from(decoded.first as Map);
+      } else if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      } else if (res.body.isEmpty) {
+        // cas 204 ou retour vide
+        return {};
+      }
+
+      throw StateError('Unexpected JSON response: ${res.body}');
     }
+
     throw HttpException(res.statusCode, res.body);
   }
 

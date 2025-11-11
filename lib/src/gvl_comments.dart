@@ -1,64 +1,88 @@
-import 'dart:convert';
+import 'dart:async';
+import 'package:http/http.dart' as http;
 import 'api_client.dart';
+import 'models.dart' hide CommentsConfig;
 import 'token_store.dart';
-import 'models.dart';
+import 'comments_config.dart';
 
-/// Main entry point for the GVL Comments SDK.
-class GvlComments {
-  static final GvlComments _i = GvlComments._();
-  GvlComments._();
-  factory GvlComments() => _i;
+class CommentsKit {
+  static CommentsKit? _instance;
+  static CommentsKit I() => _instance!;
 
-  static const _apiBase = 'https://api.goodvibeslab.cloud';
+  final CommentsConfig _config;
+  final ApiClient _http;
+  final TokenStore _tokens = TokenStore();
+  UserProfile? _user;
 
-  final _api = ApiClient();
-  final _tokens = TokenStore();
-  CommentsConfig? _config;
+  CommentsKit._(this._config, this._http);
 
-  bool get isInitialized => _config != null;
-
-  Future<void> initialize(CommentsConfig config) async {
-    _config = config;
+  /// Init MINIMALISTE : uniquement l’installKey.
+  static Future<void> initialize({
+    required String installKey,
+    http.Client? httpClient,
+  }) async {
+    final cfg = await CommentsConfig.detect(installKey: installKey);
+    _instance = CommentsKit._(cfg, ApiClient(httpClient: httpClient));
   }
 
-  Future<String> _ensureToken() async {
-    if (_tokens.isValid && _tokens.token != null) return _tokens.token!;
+  /// Binder l’utilisateur plus tard (ex: à l’ouverture de l’écran Comments).
+  Future<void> setUser(UserProfile? user) async {
+    _user = user;
+    await _tokens.clear(); // force un nouveau JWT (claims user)
+  }
 
-    final res = await _api.postJson(
-      Uri.parse('$_apiBase/api/token'),
-      {
-        'apiKey': _config!.installKey,
+  bool get hasUser => _user != null;
+
+  // === Private ===
+
+  Future<String> _getBearer() async {
+    final cached = _tokens.validBearer();
+    if (cached != null) return cached;
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'x-platform': _config.platform,
+      'x-package-name': _config.packageName,
+      'x-app-version': _config.appVersion,
+    };
+
+    final body = {
+      'apiKey': _config.installKey,
+      if (_user != null)
         'externalUser': {
-          'id': _config!.externalUserId,
-          'name': _config!.externalUserName,
+          'id': _user!.id,
+          if (_user!.name != null) 'name': _user!.name,
+          if (_user!.avatarUrl != null) 'avatarUrl': _user!.avatarUrl,
         },
-      },
-    );
+    };
 
-    final token = res['access_token'] as String;
-    final exp = (res['expires_in'] ?? 3600) as int;
-    _tokens.setToken(token, Duration(seconds: exp));
+    final json = await _http.postJson(_config.apiBase.resolve('/api/token'), body, headers: headers);
+    final token = json['access_token'] as String;
+    final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
+    _tokens.save(token, expiresIn);
     return token;
   }
 
-  /// Fetch comments for a given thread.
-  Future<List<CommentModel>> fetchComments(String threadKey) async {
-    final token = await _ensureToken();
-    final uri = Uri.parse('$_apiBase/api/comments?thread=$threadKey');
-    final list =
-    await _api.getList(uri, headers: {'Authorization': 'Bearer $token'});
-    return list.map((e) => CommentModel.fromJson(e)).toList();
+  // === Public SDK ===
+
+  Future<List<CommentModel>> listByThreadKey(String threadKey, {int limit = 50}) async {
+    final bearer = await _getBearer();
+    final url = _config.apiBase
+        .resolve('/api/comments?thread=${Uri.encodeComponent(threadKey)}&limit=$limit');
+    final list = await _http.getList(url, headers: {'Authorization': 'Bearer $bearer'});
+    return list.map((e) => CommentModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// Post a comment to a thread.
-  Future<CommentModel> post(String threadKey, String text) async {
-    final token = await _ensureToken();
-    final uri = Uri.parse('$_apiBase/api/comments');
-    final res = await _api.postJson(
-      uri,
-      {'threadKey': threadKey, 'body': text},
-      headers: {'Authorization': 'Bearer $token'},
+  Future<CommentModel> post({required String threadKey, required String body}) async {
+    if (_user == null) {
+      throw StateError('No user bound. Call setUser(UserProfile(...)) before posting.');
+    }
+    final bearer = await _getBearer();
+    final json = await _http.postJson(
+      _config.apiBase.resolve('/api/comments'),
+      {'threadKey': threadKey, 'body': body},
+      headers: {'Authorization': 'Bearer $bearer'},
     );
-    return CommentModel.fromJson(res);
+    return CommentModel.fromJson(json as Map<String, dynamic>);
   }
 }
