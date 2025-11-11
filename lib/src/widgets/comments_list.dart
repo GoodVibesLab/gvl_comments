@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:gvl_comments/gvl_comments.dart';
+import '../gvl_comments.dart';
+import '../models.dart';
 
 class GvlCommentsList extends StatefulWidget {
   final String threadKey;
-  const GvlCommentsList({super.key, required this.threadKey});
+  final UserProfile user; // <- on reçoit l’utilisateur ici
+
+  const GvlCommentsList({
+    super.key,
+    required this.threadKey,
+    required this.user,
+  });
 
   @override
   State<GvlCommentsList> createState() => _GvlCommentsListState();
@@ -15,17 +22,40 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
   final _ctrl = TextEditingController();
   bool _loading = true;
   bool _sending = false;
+  String? _lastUserId; // pour détecter un changement d’utilisateur
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _primeAndLoad();
+  }
+
+  @override
+  void didUpdateWidget(covariant GvlCommentsList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.id != widget.user.id) {
+      // utilisateur changé -> on invalide le JWT et on recharge
+      CommentsKit.I().invalidateToken();
+      _primeAndLoad();
+    } else if (oldWidget.threadKey != widget.threadKey) {
+      _load();
+    }
+  }
+
+  Future<void> _primeAndLoad() async {
+    _lastUserId = widget.user.id;
+    await _load();
   }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final list = await CommentsKit.I().listByThreadKey(widget.threadKey, limit: 100);
+      final kit = CommentsKit.I();
+      final list = await kit.listByThreadKey(
+        widget.threadKey,
+        limit: 50,
+        user: widget.user,
+      );
       setState(() {
         _comments = list;
         _loading = false;
@@ -41,15 +71,13 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
   Future<void> _send() async {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
-
     setState(() { _sending = true; _error = null; });
-
     try {
-      // NOTE: l’utilisateur doit avoir été bind ailleurs via:
-      // await CommentsKit.I().setUser(const UserProfile(id: '...', name: '...'));
-      final created = await CommentsKit.I().post(
+      final kit = CommentsKit.I();
+      final created = await kit.post(
         threadKey: widget.threadKey,
         body: text,
+        user: widget.user,
       );
       setState(() {
         _comments = [created, ...(_comments ?? [])];
@@ -67,7 +95,6 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -84,35 +111,31 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
       );
     }
 
-    final comments = _comments ?? const <CommentModel>[];
+    final comments = _comments ?? [];
 
     return Column(
       children: [
         Expanded(
           child: ListView.separated(
-            reverse: true, // derniers en haut si tu veux le flux "chat"
+            reverse: true,
             itemCount: comments.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
               final c = comments[i];
               return ListTile(
-                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 title: Text(
-                  (c.authorName ?? 'Utilisateur'),
+                  c.authorName ?? c.externalUserId,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: Text(c.body),
-                trailing: Text(
-                  _fmtTime(c.createdAt),
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
               );
             },
           ),
         ),
         const Divider(height: 1),
         Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8.0),
           child: Row(
             children: [
               Expanded(
@@ -121,7 +144,7 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _sending ? null : _send(),
                   decoration: const InputDecoration(
-                    hintText: "Ajouter un commentaire…",
+                    hintText: "Ajouter un commentaire...",
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -142,12 +165,5 @@ class _GvlCommentsListState extends State<GvlCommentsList> {
         ),
       ],
     );
-  }
-
-  String _fmtTime(DateTime dt) {
-    // Mini format local sans intl pour l’instant
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
   }
 }

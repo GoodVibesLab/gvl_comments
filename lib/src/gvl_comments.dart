@@ -12,11 +12,10 @@ class CommentsKit {
   final CommentsConfig _config;
   final ApiClient _http;
   final TokenStore _tokens = TokenStore();
-  UserProfile? _user;
 
   CommentsKit._(this._config, this._http);
 
-  /// Init MINIMALISTE : uniquement l’installKey.
+  /// Initialisation minimale : clé d’installation uniquement
   static Future<void> initialize({
     required String installKey,
     http.Client? httpClient,
@@ -25,17 +24,12 @@ class CommentsKit {
     _instance = CommentsKit._(cfg, ApiClient(httpClient: httpClient));
   }
 
-  /// Binder l’utilisateur plus tard (ex: à l’ouverture de l’écran Comments).
-  Future<void> setUser(UserProfile? user) async {
-    _user = user;
-    await _tokens.clear(); // force un nouveau JWT (claims user)
-  }
-
-  bool get hasUser => _user != null;
+  /// Permet d’invalider le JWT stocké (par ex. quand l’utilisateur change)
+  void invalidateToken() => _tokens.clear();
 
   // === Private ===
 
-  Future<String> _getBearer() async {
+  Future<String> _getBearer({UserProfile? user}) async {
     final cached = _tokens.validBearer();
     if (cached != null) return cached;
 
@@ -48,15 +42,20 @@ class CommentsKit {
 
     final body = {
       'apiKey': _config.installKey,
-      if (_user != null)
+      if (user != null)
         'externalUser': {
-          'id': _user!.id,
-          if (_user!.name != null) 'name': _user!.name,
-          if (_user!.avatarUrl != null) 'avatarUrl': _user!.avatarUrl,
+          'id': user.id,
+          if (user.name != null) 'name': user.name,
+          if (user.avatarUrl != null) 'avatarUrl': user.avatarUrl,
         },
     };
 
-    final json = await _http.postJson(_config.apiBase.resolve('/api/token'), body, headers: headers);
+    final json = await _http.postJson(
+      _config.apiBase.resolve('/api/token'),
+      body,
+      headers: headers,
+    );
+
     final token = json['access_token'] as String;
     final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
     _tokens.save(token, expiresIn);
@@ -65,19 +64,27 @@ class CommentsKit {
 
   // === Public SDK ===
 
-  Future<List<CommentModel>> listByThreadKey(String threadKey, {int limit = 50}) async {
-    final bearer = await _getBearer();
-    final url = _config.apiBase
-        .resolve('/api/comments?thread=${Uri.encodeComponent(threadKey)}&limit=$limit');
+  /// Récupère la liste des commentaires d’un thread
+  Future<List<CommentModel>> listByThreadKey(
+      String threadKey, {
+        int limit = 50,
+        UserProfile? user, // <-- ajouté
+      }) async {
+    final bearer = await _getBearer(user: user);
+    final url = _config.apiBase.resolve(
+      '/api/comments?thread=${Uri.encodeComponent(threadKey)}&limit=$limit',
+    );
     final list = await _http.getList(url, headers: {'Authorization': 'Bearer $bearer'});
     return list.map((e) => CommentModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<CommentModel> post({required String threadKey, required String body}) async {
-    if (_user == null) {
-      throw StateError('No user bound. Call setUser(UserProfile(...)) before posting.');
-    }
-    final bearer = await _getBearer();
+  /// Poste un nouveau commentaire
+  Future<CommentModel> post({
+    required String threadKey,
+    required String body,
+    required UserProfile user, // <-- obligatoire ici
+  }) async {
+    final bearer = await _getBearer(user: user);
     final json = await _http.postJson(
       _config.apiBase.resolve('/api/comments'),
       {'threadKey': threadKey, 'body': body},
