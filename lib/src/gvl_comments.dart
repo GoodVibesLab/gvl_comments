@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'api_client.dart';
 import 'models.dart' hide CommentsConfig;
@@ -51,7 +52,7 @@ class CommentsKit {
     };
 
     final json = await _http.postJson(
-      _config.apiBase.resolve('/api/token'),
+      _config.apiBase.resolve('token'),
       body,
       headers: headers,
     );
@@ -71,9 +72,12 @@ class CommentsKit {
         UserProfile? user, // <-- ajouté
       }) async {
     final bearer = await _getBearer(user: user);
+    debugPrint('apiBase=${_config.apiBase}');
     final url = _config.apiBase.resolve(
-      '/api/comments?thread=${Uri.encodeComponent(threadKey)}&limit=$limit',
+      'comments?thread=${Uri.encodeComponent(threadKey)}&limit=$limit',
     );
+
+    debugPrint('CommentsKit.listByThreadKey: url=$url');
     final list = await _http.getList(url, headers: {'Authorization': 'Bearer $bearer'});
     return list.map((e) => CommentModel.fromJson(e as Map<String, dynamic>)).toList();
   }
@@ -86,7 +90,7 @@ class CommentsKit {
   }) async {
     final bearer = await _getBearer(user: user);
     final json = await _http.postJson(
-      _config.apiBase.resolve('/api/comments'),
+      _config.apiBase.resolve('comments'),
       {'threadKey': threadKey, 'body': body},
       headers: {'Authorization': 'Bearer $bearer'},
     );
@@ -96,7 +100,7 @@ class CommentsKit {
   Future<void> identify(UserProfile user) async {
     // Option “soft”: si tu veux que ça ne casse pas en cas d’erreur, tu catch ici.
     await _http.postJson(
-      _config.apiBase.resolve('/comments/v1/profile/upsert'),
+      _config.apiBase.resolve('profile/upsert'),
       {
         'external_user_id': user.id,
         if (user.name != null) 'display_name': user.name,

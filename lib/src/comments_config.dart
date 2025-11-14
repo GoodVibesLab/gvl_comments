@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -23,9 +23,11 @@ class CommentsConfig {
     final apiBase = Uri.parse(
       const String.fromEnvironment(
         'GVL_API_BASE',
-        defaultValue: 'https://api.goodvibeslab.cloud/v1/comments/',
+        defaultValue: 'https://api.goodvibeslab.cloud/comments/v1/',
       ),
     );
+
+    debugPrint('CommentsConfig.detect: apiBase=$apiBase');
 
     String platform;
     if (kIsWeb) {
