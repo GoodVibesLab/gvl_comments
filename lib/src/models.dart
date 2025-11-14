@@ -19,29 +19,31 @@ class CommentsConfig {
 
 class CommentModel {
   final String id;
-  final String threadId;
   final String externalUserId;
   final String? authorName;
   final String body;
   final DateTime createdAt;
+  final String? avatarUrl;
 
-  const CommentModel({
+  CommentModel({
     required this.id,
-    required this.threadId,
     required this.externalUserId,
     this.authorName,
     required this.body,
     required this.createdAt,
+    this.avatarUrl,
   });
 
-  factory CommentModel.fromJson(Map<String, dynamic> j) => CommentModel(
-    id: j['id'] as String,
-    threadId: j['thread_id'] as String,
-    externalUserId: j['external_user_id'] as String,
-    authorName: j['author_name'] as String?,
-    body: j['body'] as String,
-    createdAt: DateTime.parse(j['created_at'] as String),
-  );
+  factory CommentModel.fromJson(Map<String, dynamic> json) {
+    return CommentModel(
+      id: json['id'] as String,
+      externalUserId: json['external_user_id'] as String,
+      authorName: json['author_name'] as String?,
+      body: json['body'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      avatarUrl: json['avatar_url'] as String?,
+    );
+  }
 }
 
 class UserProfile {

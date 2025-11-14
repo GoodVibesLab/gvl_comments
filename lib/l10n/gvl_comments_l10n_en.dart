@@ -1,0 +1,19 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'gvl_comments_l10n.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class GvlCommentsL10nEn extends GvlCommentsL10n {
+  GvlCommentsL10nEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get retryTooltip => 'Retry';
+
+  @override
+  String get sendTooltip => 'Send';
+
+  @override
+  String get addCommentHint => 'Add a comment…';
+}

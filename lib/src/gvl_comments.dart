@@ -92,4 +92,19 @@ class CommentsKit {
     );
     return CommentModel.fromJson(json as Map<String, dynamic>);
   }
+
+  Future<void> identify(UserProfile user) async {
+    // Option “soft”: si tu veux que ça ne casse pas en cas d’erreur, tu catch ici.
+    await _http.postJson(
+      _config.apiBase.resolve('/comments/v1/profile/upsert'),
+      {
+        'external_user_id': user.id,
+        if (user.name != null) 'display_name': user.name,
+        if (user.avatarUrl != null) 'avatar_url': user.avatarUrl,
+      },
+      headers: {
+        'Authorization': 'Bearer ${_config.installKey}', // si endpoint protégé par clé d'install
+      },
+    );
+  }
 }

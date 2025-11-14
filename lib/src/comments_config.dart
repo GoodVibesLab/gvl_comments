@@ -23,7 +23,7 @@ class CommentsConfig {
     final apiBase = Uri.parse(
       const String.fromEnvironment(
         'GVL_API_BASE',
-        defaultValue: 'https://api.goodvibeslab.cloud',
+        defaultValue: 'https://api.goodvibeslab.cloud/v1/comments/',
       ),
     );
 
