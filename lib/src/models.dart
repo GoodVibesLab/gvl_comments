@@ -41,7 +41,7 @@ class CommentModel {
       authorName: json['author_name'] as String?,
       body: json['body'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
-      avatarUrl: json['avatar_url'] as String?,
+      avatarUrl: json['avatar_url_canonical'] as String?,
     );
   }
 }

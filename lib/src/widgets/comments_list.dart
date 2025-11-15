@@ -7,18 +7,20 @@ class GvlCommentsList extends StatefulWidget {
   final String threadKey;
   final UserProfile user;
 
-  // Slots / Builders (tous optionnels)
   final CommentItemBuilder? commentItemBuilder;
   final AvatarBuilder? avatarBuilder;
   final SendButtonBuilder? sendButtonBuilder;
   final ComposerBuilder? composerBuilder;
+  final SeparatorBuilder? separatorBuilder;
 
   final GvlCommentAlignment alignment;
 
-  // Overrides légers
   final int limit;
   final EdgeInsetsGeometry? padding;
   final ScrollController? scrollController;
+
+  /// Optional local theme override for this widget.
+  final GvlCommentsThemeData? theme;
 
   const GvlCommentsList({
     super.key,
@@ -28,22 +30,30 @@ class GvlCommentsList extends StatefulWidget {
     this.avatarBuilder,
     this.sendButtonBuilder,
     this.composerBuilder,
+    this.separatorBuilder,
     this.limit = 50,
     this.padding,
     this.scrollController,
     this.alignment = GvlCommentAlignment.left,
+    this.theme,
   });
 
   @override
   State<GvlCommentsList> createState() => _GvlCommentsListState();
 }
 
-class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAliveClientMixin {
+class _GvlCommentsListState extends State<GvlCommentsList>
+    with AutomaticKeepAliveClientMixin {
   List<CommentModel>? _comments;
   String? _error;
   final _ctrl = TextEditingController();
   bool _loading = true;
   bool _sending = false;
+
+  // Pagination state
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  String? _beforeCursor; // ISO-8601 string of oldest loaded comment
 
   @override
   bool get wantKeepAlive => true;
@@ -59,23 +69,30 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user.id != widget.user.id) {
       CommentsKit.I().invalidateToken();
+      _resetPagination();
       _primeAndLoad();
     } else if (oldWidget.threadKey != widget.threadKey) {
+      _resetPagination();
       _load();
     }
+  }
+
+  void _resetPagination() {
+    _comments = null;
+    _hasMore = true;
+    _beforeCursor = null;
   }
 
   Future<void> _primeAndLoad() async {
     final kit = CommentsKit.I();
 
-    // 1) on upsert le profil
+    // Profile upsert based on current JWT
     try {
       await kit.identify(widget.user);
     } catch (e) {
       debugPrint('gvl_comments: error during identify(): $e');
     }
 
-    // 2) puis on charge les commentaires
     await _load();
   }
 
@@ -88,17 +105,72 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
       final kit = CommentsKit.I();
       final list = await kit.listByThreadKey(
         widget.threadKey,
-        limit: widget.limit,
         user: widget.user,
+        limit: widget.limit,
+        before: null, // initial page: no cursor
       );
+
+      debugPrint(
+          'gvl_comments: loaded ${list.length} comments for thread ${widget.threadKey}');
+      for (final c in list) {
+        debugPrint(
+            ' - [${c.id}] ${c.authorName ?? c.externalUserId}: ${c.body}, avatar=${c.avatarUrl}');
+      }
+
       setState(() {
         _comments = list;
+        _hasMore = list.length >= widget.limit;
+        if (_comments != null && _comments!.isNotEmpty) {
+          _beforeCursor = _comments!.last.createdAt.toIso8601String();
+        } else {
+          _beforeCursor = null;
+        }
         _loading = false;
       });
     } catch (e) {
       setState(() {
         _error = e.toString();
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _beforeCursor == null) return;
+
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+
+    try {
+      final kit = CommentsKit.I();
+      final list = await kit.listByThreadKey(
+        widget.threadKey,
+        user: widget.user,
+        limit: widget.limit,
+        before: _beforeCursor,
+      );
+
+      debugPrint(
+          'gvl_comments: loaded MORE ${list.length} comments for thread ${widget.threadKey}');
+
+      setState(() {
+        final current = _comments ?? <CommentModel>[];
+        _comments = [...current, ...list];
+
+        _hasMore = list.length >= widget.limit;
+        if (_comments != null && _comments!.isNotEmpty) {
+          _beforeCursor = _comments!.last.createdAt.toIso8601String();
+        } else {
+          _beforeCursor = null;
+        }
+        _loadingMore = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loadingMore = false;
       });
     }
   }
@@ -142,25 +214,44 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
   Widget build(BuildContext context) {
     super.build(context);
 
-    final l10n = GvlCommentsL10n.of(context);
+    final child = _buildContent(context);
 
+    if (widget.theme != null) {
+      return GvlCommentsTheme(
+        data: widget.theme!,
+        child: child,
+      );
+    }
+
+    return child;
+  }
+
+  Widget _buildContent(BuildContext context) {
+    super.build(context);
+
+    final l10n = GvlCommentsL10n.of(context);
     final t = GvlCommentsTheme.of(context);
 
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_error != null) {
+    if (_error != null && (_comments == null || _comments!.isEmpty)) {
       return Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // plus de titre "Erreur" (moins de strings visibles)
-            Text(_error!, style: t.errorStyle ?? TextStyle(color: t.errorColor ?? Theme.of(context).colorScheme.error)),
+            Text(
+              _error!,
+              style: t.errorStyle ??
+                  TextStyle(
+                    color: t.errorColor ?? Theme.of(context).colorScheme.error,
+                  ),
+            ),
             const SizedBox(height: 12),
             IconButton.outlined(
-              tooltip: l10n?.retryTooltip,    // ex: "Réessayer"
+              tooltip: l10n?.retryTooltip,
               onPressed: _load,
               icon: const Icon(Icons.refresh),
             ),
@@ -173,6 +264,9 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
     final padding = widget.padding ??
         EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
 
+    final hasMoreRow = _hasMore && comments.isNotEmpty;
+    final itemCount = comments.length + (hasMoreRow ? 1 : 0);
+
     return Column(
       children: [
         Expanded(
@@ -182,18 +276,25 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
               controller: widget.scrollController,
               reverse: true,
               padding: padding,
-              itemCount: comments.length,
-              separatorBuilder: (_, __) => Divider(
-                height: 1,
-                color: Theme.of(context).dividerColor,
-              ),
-              itemBuilder: (_, i) {
+              itemCount: itemCount,
+              separatorBuilder: (ctx, index) {
+                // Do not put separator between last comment and "load more" row
+                if (hasMoreRow && index == comments.length - 1) {
+                  return const SizedBox.shrink();
+                }
+                return _buildSeparator(ctx);
+              },
+              itemBuilder: (ctx, i) {
+                if (hasMoreRow && i == comments.length) {
+                  return _buildLoadMoreRow(ctx);
+                }
+
                 final c = comments[i];
                 final isMine = c.externalUserId == widget.user.id;
 
                 if (widget.commentItemBuilder != null) {
                   return widget.commentItemBuilder!(
-                    context,
+                    ctx,
                     c,
                     GvlCommentMeta(isMine: isMine),
                   );
@@ -214,9 +315,13 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
     );
   }
 
-  Widget _buildComposer(BuildContext context, GvlCommentsThemeData t, GvlCommentsL10n? l10n) {
+  Widget _buildComposer(
+      BuildContext context,
+      GvlCommentsThemeData t,
+      GvlCommentsL10n? l10n,
+      ) {
     final maxLines = t.composerMaxLines ?? 6;
-    final hint = l10n?.addCommentHint; // null-safe: si pas de l10n, pas de hint (OK)
+    final hint = l10n?.addCommentHint;
 
     if (widget.composerBuilder != null) {
       return widget.composerBuilder!(
@@ -242,30 +347,71 @@ class _GvlCommentsListState extends State<GvlCommentsList> with AutomaticKeepAli
               maxLines: null,
               minLines: 1,
               decoration: InputDecoration(
-                hintText: hint, // <- peut être null, ça marche
-                isDense: dense != null ? dense.vertical < 0 : true,
-                border: t.composerShape == null ? const OutlineInputBorder() : InputBorder.none,
+                hintText: hint,
+                isDense: dense.vertical < 0,
+                border: t.composerShape == null
+                    ? const OutlineInputBorder()
+                    : InputBorder.none,
               ),
             ),
           ),
           SizedBox(width: t.spacing ?? 8),
           widget.sendButtonBuilder != null
-              ? widget.sendButtonBuilder!(context, _sending ? () {} : _send, _sending)
+              ? widget.sendButtonBuilder!(
+            context,
+            _sending ? () {} : _send,
+            _sending,
+          )
               : IconButton.filled(
             onPressed: _sending ? null : _send,
-            tooltip: l10n?.sendTooltip, // ex: "Envoyer"
+            tooltip: l10n?.sendTooltip,
             icon: _sending
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
                 : const Icon(Icons.send),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildSeparator(BuildContext context) {
+    if (widget.separatorBuilder == null) {
+      return SizedBox(
+        height: (GvlCommentsTheme.of(context).spacing ?? 8) / 2,
+      );
+    }
+    return widget.separatorBuilder!(context);
+  }
+
+  Widget _buildLoadMoreRow(BuildContext context) {
+    final t = GvlCommentsTheme.of(context);
+    final l10n = GvlCommentsL10n.of(context);
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.spacing ?? 8),
+      child: Center(
+        child: _loadingMore
+            ? const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )
+            : TextButton(
+          onPressed: _loadMore,
+          child: Text(
+            l10n?.loadMoreLabel ?? 'Load previous comments',
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-
-/// Élément par défaut (hérite totalement du thème hôte)
+/// Default comment item (bubble + optional avatar).
 class _DefaultCommentItem extends StatelessWidget {
   final CommentModel comment;
   final bool isMine;
@@ -285,7 +431,8 @@ class _DefaultCommentItem extends StatelessWidget {
     final t = GvlCommentsTheme.of(context);
     final cs = Theme.of(context).colorScheme;
 
-    final bg = isMine ? (t.bubbleColor ?? cs.surfaceContainerHighest)
+    final bg = isMine
+        ? (t.bubbleColor ?? cs.surfaceContainerHighest)
         : (t.bubbleAltColor ?? cs.surfaceContainer);
     final text = Theme.of(context).textTheme;
 
@@ -302,21 +449,27 @@ class _DefaultCommentItem extends StatelessWidget {
       color: bg,
       elevation: t.elevation ?? 0,
       shape: RoundedRectangleBorder(
-        borderRadius: t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
+        borderRadius:
+        t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: Padding(
           padding: EdgeInsets.all((t.spacing ?? 8) + 4),
           child: Column(
-            crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment:
+            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               Text(
                 comment.authorName ?? comment.externalUserId,
-                style: t.authorStyle ?? text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                style: t.authorStyle ??
+                    text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
-              Text(comment.body, style: t.bodyStyle ?? text.bodyMedium),
+              Text(
+                comment.body,
+                style: t.bodyStyle ?? text.bodyMedium,
+              ),
             ],
           ),
         ),
@@ -329,24 +482,33 @@ class _DefaultCommentItem extends StatelessWidget {
         horizontal: (t.spacing ?? 8),
       ),
       child: Align(
-        alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+        alignment:
+        alignRight ? Alignment.centerRight : Alignment.centerLeft,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!alignRight && avatar != null) ...[
               SizedBox(
-                width: avatarSize, height: avatarSize,
-                child: ClipRRect(borderRadius: BorderRadius.circular(avatarSize/2), child: avatar),
+                width: avatarSize,
+                height: avatarSize,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(avatarSize / 2),
+                  child: avatar,
+                ),
               ),
               SizedBox(width: t.spacing ?? 8),
             ],
             bubble,
             if (alignRight && avatar != null) ...[
-              SizedBox(width: (t.spacing ?? 8)),
+              SizedBox(width: t.spacing ?? 8),
               SizedBox(
-                width: avatarSize, height: avatarSize,
-                child: ClipRRect(borderRadius: BorderRadius.circular(avatarSize/2), child: avatar),
+                width: avatarSize,
+                height: avatarSize,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(avatarSize / 2),
+                  child: avatar,
+                ),
               ),
             ],
           ],
@@ -356,7 +518,7 @@ class _DefaultCommentItem extends StatelessWidget {
   }
 }
 
-/// Métadonnées passées aux builders pour customiser l’affichage.
+/// Metadata passed to builders to customize rendering.
 class GvlCommentMeta {
   final bool isMine;
   final bool isSending;
@@ -377,6 +539,10 @@ typedef CommentItemBuilder = Widget Function(
     GvlCommentMeta meta,
     );
 
+typedef SeparatorBuilder = Widget Function(
+    BuildContext context,
+    );
+
 typedef AvatarBuilder = Widget Function(
     BuildContext context,
     CommentModel comment,
@@ -389,7 +555,7 @@ typedef SendButtonBuilder = Widget Function(
     bool isSending,
     );
 
-/// Permet de remplacer tout le composer (input + bouton)
+/// Allows replacing the whole composer (input + send button).
 typedef ComposerBuilder = Widget Function(
     BuildContext context, {
     required TextEditingController controller,
@@ -399,19 +565,16 @@ typedef ComposerBuilder = Widget Function(
     required String hintText,
     });
 
-/// Rôles sémantiques + tokens d’UI.
-/// Ne mets pas de valeurs brutes : tout est optionnel et tombe en fallback
-/// via `GvlCommentsThemeData.defaults(context)`.
 @immutable
 class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
-  // Couleurs
-  final Color? bubbleColor;        // fond des messages
-  final Color? bubbleAltColor;     // fond des messages "autres"
-  final Color? gutterColor;        // fond de la zone composer / séparateurs
-  final Color? badgeColor;         // ex: badge staff / auteur
-  final Color? errorColor;         // erreurs
+  // Colors
+  final Color? bubbleColor;
+  final Color? bubbleAltColor;
+  final Color? gutterColor;
+  final Color? badgeColor;
+  final Color? errorColor;
 
-  // Typo (laisser fontFamily null => la police du host s’applique)
+  // Typography
   final TextStyle? authorStyle;
   final TextStyle? bodyStyle;
   final TextStyle? timestampStyle;
@@ -419,14 +582,14 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   final TextStyle? hintStyle;
   final TextStyle? buttonStyle;
 
-  // Spacing / tailles
-  final double? spacing;           // 8, 12…
-  final double? avatarSize;        // 28–40
+  // Layout / sizes
+  final double? spacing;
+  final double? avatarSize;
   final BorderRadius? bubbleRadius;
   final OutlinedBorder? composerShape;
   final double? elevation;
 
-  // Comportement
+  // Behavior
   final int? composerMaxLines;
 
   const GvlCommentsThemeData({
@@ -449,7 +612,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     this.composerMaxLines,
   });
 
-  /// Fallbacks mappés sur le Theme hôte (Material 3 friendly)
+  /// Baseline theme tuned for comment threads.
   factory GvlCommentsThemeData.defaults(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -463,9 +626,11 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       errorColor: cs.error,
       authorStyle: tt.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       bodyStyle: tt.bodyMedium,
-      timestampStyle: tt.bodySmall?.copyWith(color: cs.onSurface.withOpacity(0.6)),
+      timestampStyle:
+      tt.bodySmall?.copyWith(color: cs.onSurface.withAlpha(0x99)),
       errorStyle: tt.bodyMedium?.copyWith(color: cs.error),
-      hintStyle: theme.inputDecorationTheme.hintStyle ?? tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+      hintStyle: theme.inputDecorationTheme.hintStyle ??
+          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
       buttonStyle: tt.labelLarge,
       spacing: 8,
       avatarSize: 32,
@@ -480,7 +645,60 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
-  /// Combine deux thèmes (le `other` prime s’il définit une valeur)
+  factory GvlCommentsThemeData.neutral(BuildContext context) {
+    final base = GvlCommentsThemeData.defaults(context);
+    return base.copyWith(
+      spacing: (base.spacing ?? 8),
+      avatarSize: base.avatarSize ?? 32,
+      elevation: 0,
+    );
+  }
+
+  factory GvlCommentsThemeData.compact(BuildContext context) {
+    final base = GvlCommentsThemeData.defaults(context);
+    return base.copyWith(
+      spacing: (base.spacing ?? 8) * 0.6,
+      avatarSize: (base.avatarSize ?? 32) * 0.8,
+      bodyStyle: base.bodyStyle?.copyWith(
+        fontSize: (base.bodyStyle?.fontSize ?? 14) - 1,
+      ),
+      authorStyle: base.authorStyle?.copyWith(
+        fontSize: (base.authorStyle?.fontSize ?? 13) - 1,
+      ),
+      bubbleRadius: const BorderRadius.all(Radius.circular(10)),
+      elevation: 0,
+    );
+  }
+
+  factory GvlCommentsThemeData.card(BuildContext context) {
+    final base = GvlCommentsThemeData.defaults(context);
+    final cs = Theme.of(context).colorScheme;
+    return base.copyWith(
+      bubbleColor: cs.surface,
+      bubbleAltColor: cs.surface,
+      gutterColor: cs.surface,
+      elevation: 1.5,
+      spacing: (base.spacing ?? 8) + 2,
+      bubbleRadius: const BorderRadius.all(Radius.circular(14)),
+    );
+  }
+
+  factory GvlCommentsThemeData.bubble(BuildContext context) {
+    final base = GvlCommentsThemeData.defaults(context);
+    final cs = Theme.of(context).colorScheme;
+    return base.copyWith(
+      bubbleColor: cs.primaryContainer.withAlpha(220),
+      bubbleAltColor: cs.surfaceContainer,
+      authorStyle: base.authorStyle?.copyWith(
+        color: cs.onPrimaryContainer,
+        fontWeight: FontWeight.w700,
+      ),
+      bodyStyle: base.bodyStyle?.copyWith(color: cs.onPrimaryContainer),
+      bubbleRadius: const BorderRadius.all(Radius.circular(18)),
+      spacing: (base.spacing ?? 8) + 2,
+    );
+  }
+
   GvlCommentsThemeData merge(GvlCommentsThemeData? other) {
     if (other == null) return this;
     return GvlCommentsThemeData(
@@ -504,7 +722,6 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
-  /// Implémentations ThemeExtension
   @override
   GvlCommentsThemeData copyWith({
     Color? bubbleColor,
@@ -548,7 +765,9 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
 
   @override
   ThemeExtension<GvlCommentsThemeData> lerp(
-      ThemeExtension<GvlCommentsThemeData>? other, double t) {
+      ThemeExtension<GvlCommentsThemeData>? other,
+      double t,
+      ) {
     if (other is! GvlCommentsThemeData) return this;
     return GvlCommentsThemeData(
       bubbleColor: Color.lerp(bubbleColor, other.bubbleColor, t),
@@ -567,22 +786,19 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       bubbleRadius: BorderRadius.lerp(bubbleRadius, other.bubbleRadius, t),
       composerShape: t < 0.5 ? composerShape : other.composerShape,
       elevation: lerpDoubleNullable(elevation, other.elevation, t),
-      composerMaxLines: t < 0.5 ? composerMaxLines : other.composerMaxLines,
+      composerMaxLines:
+      t < 0.5 ? composerMaxLines : other.composerMaxLines,
     );
   }
 
   static double? lerpDoubleNullable(double? a, double? b, double t) {
     if (a == null && b == null) return null;
-    return Tween<double>(begin: a ?? b ?? 0, end: b ?? a ?? 0).transform(t);
+    return Tween<double>(begin: a ?? b ?? 0, end: b ?? a ?? 0)
+        .transform(t);
   }
 }
 
-/// Wrapper pour overrides locaux.
-/// Utilisation :
-/// GvlCommentsTheme(
-///   data: GvlCommentsThemeData(bubbleRadius: BorderRadius.circular(16)),
-///   child: GvlCommentsList(...),
-/// )
+/// Wrapper for local theme overrides.
 class GvlCommentsTheme extends InheritedWidget {
   final GvlCommentsThemeData data;
 
@@ -593,14 +809,16 @@ class GvlCommentsTheme extends InheritedWidget {
   }) : super(key: key, child: child);
 
   static GvlCommentsThemeData of(BuildContext context) {
-    final local = context.dependOnInheritedWidgetOfExactType<GvlCommentsTheme>();
+    final local =
+    context.dependOnInheritedWidgetOfExactType<GvlCommentsTheme>();
     final ext = Theme.of(context).extension<GvlCommentsThemeData>();
     final base = GvlCommentsThemeData.defaults(context);
     return base.merge(ext).merge(local?.data);
   }
 
   @override
-  bool updateShouldNotify(GvlCommentsTheme oldWidget) => data != oldWidget.data;
+  bool updateShouldNotify(GvlCommentsTheme oldWidget) =>
+      data != oldWidget.data;
 }
 
 @immutable
@@ -646,5 +864,5 @@ class GvlCommentsStrings {
   }
 }
 
-/// Alignement des bulles de message
+/// Bubble alignment.
 enum GvlCommentAlignment { left, right, autoByUser }

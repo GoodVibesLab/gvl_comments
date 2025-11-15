@@ -22,16 +22,24 @@ class DemoApp extends StatelessWidget {
         appBar: AppBar(title: const Text('GVL Comments Demo')),
         body: GvlCommentsList(
           threadKey: 'post:123',
-          user: UserProfile(id: 'user_1', name: 'Joris2', avatarUrl: 'https://gravatar.com/avatar/4084956992ad3ad41e36a53473b1e94f?s=400&d=robohash&r=x'),
-          avatarBuilder: (context, comment, size) => CircleAvatar(
-            radius: size / 2,
-            backgroundImage: comment.avatarUrl != null ? NetworkImage(comment.avatarUrl!) : null,
-            child: comment.avatarUrl == null ? Text((comment.authorName?.isNotEmpty ?? false) ? comment.authorName![0] : '?') : null,
+          user: UserProfile(
+            id: 'user_1',
+            name: 'Joris43',
+            avatarUrl:
+                'https://robohash.org/58266d40197a5e045353e8faad9368a9?set=set4&bgset=&size=400x400',
+          ),
+          theme: GvlCommentsTheme.of(context).copyWith(
+            avatarSize: 40.0,
+            bubbleColor: Colors.blue.shade50,
+          ),
+          avatarBuilder: (context, comment, size) {
+            return CircleAvatar(
+              radius: size / 2,
+              backgroundImage:comment.avatarUrl != null ? NetworkImage(comment.avatarUrl!) : null,
+              backgroundColor: Colors.grey.shade300,
+            );
+          },
         ),
-        ),
-
-
-
       ),
     );
   }

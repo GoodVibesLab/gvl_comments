@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
+
 import 'api_client.dart';
 import 'models.dart' hide CommentsConfig;
 import 'token_store.dart';
@@ -16,7 +17,7 @@ class CommentsKit {
 
   CommentsKit._(this._config, this._http);
 
-  /// Initialisation minimale : clé d’installation uniquement
+  /// Minimal initialization with install key only.
   static Future<void> initialize({
     required String installKey,
     http.Client? httpClient,
@@ -25,10 +26,10 @@ class CommentsKit {
     _instance = CommentsKit._(cfg, ApiClient(httpClient: httpClient));
   }
 
-  /// Permet d’invalider le JWT stocké (par ex. quand l’utilisateur change)
+  /// Clears the cached JWT (for example when the user changes).
   void invalidateToken() => _tokens.clear();
 
-  // === Private ===
+  // ===== Internal =====
 
   Future<String> _getBearer({UserProfile? user}) async {
     final cached = _tokens.validBearer();
@@ -41,7 +42,7 @@ class CommentsKit {
       'x-app-version': _config.appVersion,
     };
 
-    final body = {
+    final body = <String, dynamic>{
       'apiKey': _config.installKey,
       if (user != null)
         'externalUser': {
@@ -63,52 +64,74 @@ class CommentsKit {
     return token;
   }
 
-  // === Public SDK ===
+  // ===== Public SDK =====
 
-  /// Récupère la liste des commentaires d’un thread
+  /// List comments for a thread key.
+  ///
+  /// [before] is an optional ISO-8601 cursor (created_at). If provided,
+  /// only comments with created_at < before are returned.
   Future<List<CommentModel>> listByThreadKey(
       String threadKey, {
+        required UserProfile user,
         int limit = 50,
-        UserProfile? user, // <-- ajouté
+        String? before,
       }) async {
     final bearer = await _getBearer(user: user);
-    debugPrint('apiBase=${_config.apiBase}');
-    final url = _config.apiBase.resolve(
-      'comments?thread=${Uri.encodeComponent(threadKey)}&limit=$limit',
-    );
+    debugPrint('gvl_comments: apiBase=${_config.apiBase}');
 
-    debugPrint('CommentsKit.listByThreadKey: url=$url');
-    final list = await _http.getList(url, headers: {'Authorization': 'Bearer $bearer'});
-    return list.map((e) => CommentModel.fromJson(e as Map<String, dynamic>)).toList();
+    final params = <String, String>{
+      'thread': threadKey,
+      'limit': '$limit',
+      if (before != null) 'before': before,
+    };
+    final query = Uri(queryParameters: params).query;
+
+    final url = _config.apiBase.resolve('comments?$query');
+    debugPrint('gvl_comments: listByThreadKey → $url');
+
+    final list = await _http.getList(
+      url,
+      headers: {'Authorization': 'Bearer $bearer'},
+    );
+    return list
+        .map((e) => CommentModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  /// Poste un nouveau commentaire
   Future<CommentModel> post({
     required String threadKey,
     required String body,
-    required UserProfile user, // <-- obligatoire ici
+    required UserProfile user,
   }) async {
     final bearer = await _getBearer(user: user);
     final json = await _http.postJson(
       _config.apiBase.resolve('comments'),
-      {'threadKey': threadKey, 'body': body},
+      {
+        'threadKey': threadKey,
+        'body': body,
+      },
       headers: {'Authorization': 'Bearer $bearer'},
     );
     return CommentModel.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Best-effort profile sync (name / avatar) based on the JWT.
   Future<void> identify(UserProfile user) async {
-    // Option “soft”: si tu veux que ça ne casse pas en cas d’erreur, tu catch ici.
-    await _http.postJson(
-      _config.apiBase.resolve('profile/upsert'),
-      {
-        'external_user_id': user.id,
-        if (user.name != null) 'display_name': user.name,
-        if (user.avatarUrl != null) 'avatar_url': user.avatarUrl,
-      },
-      headers: {
-        'Authorization': 'Bearer ${_config.installKey}', // si endpoint protégé par clé d'install
-      },
-    );
+    try {
+      final bearer = await _getBearer(user: user);
+
+      await _http.postJson(
+        _config.apiBase.resolve('profile/upsert'),
+        {
+          if (user.name != null) 'displayName': user.name,
+          if (user.avatarUrl != null) 'avatarUrl': user.avatarUrl,
+        },
+        headers: {
+          'Authorization': 'Bearer $bearer',
+        },
+      );
+    } catch (e) {
+      debugPrint('gvl_comments: error during identify(): $e');
+    }
   }
 }
