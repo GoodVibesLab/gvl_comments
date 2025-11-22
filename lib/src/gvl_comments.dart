@@ -7,6 +7,7 @@ import 'models.dart' hide CommentsConfig;
 import 'token_store.dart';
 import 'comments_config.dart';
 
+/// High-level entry point for interacting with GoodVibesLab comments.
 class CommentsKit {
   static CommentsKit? _instance;
   static CommentsKit I() => _instance!;

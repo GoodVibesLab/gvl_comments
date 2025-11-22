@@ -1,3 +1,4 @@
+/// Public entrypoint for the GoodVibesLab comments Flutter SDK.
 library gvl_comments;
 
 export 'src/gvl_comments.dart';

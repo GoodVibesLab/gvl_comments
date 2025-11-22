@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+/// Minimal HTTP helper for the Comments SDK.
 class ApiClient {
   final http.Client _http;
   ApiClient({http.Client? httpClient}) : _http = httpClient ?? http.Client();
@@ -19,13 +20,13 @@ class ApiClient {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final decoded = jsonDecode(res.body);
 
-      // ✅ Tolère les deux formats : tableau ou objet unique
+      // Accept both array and single-object payloads.
       if (decoded is List && decoded.isNotEmpty) {
         return Map<String, dynamic>.from(decoded.first as Map);
       } else if (decoded is Map) {
         return Map<String, dynamic>.from(decoded);
       } else if (res.body.isEmpty) {
-        // cas 204 ou retour vide
+        // Handles empty body (e.g., 204 responses).
         return {};
       }
 

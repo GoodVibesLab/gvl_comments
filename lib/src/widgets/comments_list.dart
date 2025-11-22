@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../l10n/gvl_comments_l10n.dart';
-import '../gvl_comments.dart'; // CommentsKit.I()
+import '../gvl_comments.dart';
 import '../models.dart';
 
+/// Ready-to-use comment thread widget with pagination and a composer.
 class GvlCommentsList extends StatefulWidget {
   final String threadKey;
   final UserProfile user;
@@ -53,7 +54,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   // Pagination state
   bool _loadingMore = false;
   bool _hasMore = true;
-  String? _beforeCursor; // ISO-8601 string of oldest loaded comment
+  String? _beforeCursor;
 
   @override
   bool get wantKeepAlive => true;
@@ -86,7 +87,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   Future<void> _primeAndLoad() async {
     final kit = CommentsKit.I();
 
-    // Profile upsert based on current JWT
+    // Synchronize the profile based on the current JWT.
     try {
       await kit.identify(widget.user);
     } catch (e) {
@@ -107,7 +108,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         widget.threadKey,
         user: widget.user,
         limit: widget.limit,
-        before: null, // initial page: no cursor
+        before: null,
       );
 
       debugPrint(
@@ -278,7 +279,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
               padding: padding,
               itemCount: itemCount,
               separatorBuilder: (ctx, index) {
-                // Do not put separator between last comment and "load more" row
+                // Do not put separator between last comment and "load more" row.
                 if (hasMoreRow && index == comments.length - 1) {
                   return const SizedBox.shrink();
                 }

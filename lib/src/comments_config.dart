@@ -2,12 +2,22 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 
+/// Runtime configuration detected from the host platform and app metadata.
 class CommentsConfig {
-  final String installKey;   // cmt_live_xxx
-  final Uri apiBase;         // auto: https://api.goodvibeslab.cloud
-  final String platform;     // android | ios | web (auto)
-  final String packageName;  // auto
-  final String appVersion;   // auto
+  /// Your GoodVibesLab install key (for example `cmt_live_xxx`).
+  final String installKey;
+
+  /// Base API endpoint used by the SDK.
+  final Uri apiBase;
+
+  /// Platform identifier (`android`, `ios`, `web`, or `unknown`).
+  final String platform;
+
+  /// Host app package/bundle identifier if available.
+  final String packageName;
+
+  /// Host app version string if available.
+  final String appVersion;
 
   CommentsConfig._({
     required this.installKey,
@@ -17,9 +27,9 @@ class CommentsConfig {
     required this.appVersion,
   });
 
-  /// Détection auto (plateforme, bundle/basename et version).
+  /// Detects platform, package, and version metadata.
   static Future<CommentsConfig> detect({required String installKey}) async {
-    // Base API: overridable via --dart-define mais invisible côté app
+    // Base API can be overridden via --dart-define, but remains opaque to apps.
     final apiBase = Uri.parse(
       const String.fromEnvironment(
         'GVL_API_BASE',

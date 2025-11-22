@@ -1,10 +1,12 @@
+/// In-memory cache for bearer tokens with a small safety margin on expiry.
 class TokenStore {
   String? _token;
   DateTime? _exp;
 
+  /// Stores the token and expires it 30 seconds before the official time.
   void save(String token, int expiresInSec) {
     _token = token;
-    _exp = DateTime.now().add(Duration(seconds: expiresInSec - 30)); // marge 30s
+    _exp = DateTime.now().add(Duration(seconds: expiresInSec - 30));
   }
 
   String? validBearer() {
