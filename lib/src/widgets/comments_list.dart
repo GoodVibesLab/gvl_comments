@@ -404,7 +404,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
             : TextButton(
           onPressed: _loadMore,
           child: Text(
-            l10n?.loadMoreLabel ?? 'Load previous comments',
+             'Load previous comments',
           ),
         ),
       ),
