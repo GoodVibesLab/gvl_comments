@@ -2,5 +2,8 @@
   "@@locale": "en",
   "retryTooltip": "Retry",
   "sendTooltip": "Send",
-  "addCommentHint": "Add a comment…"
+  "addCommentHint": "Add a comment…",
+  "reportSentLabel": "Report sent",
+  "reportErrorLabel": "Error sending report",
+  "reportLabel": "Report"
 }

@@ -111,6 +111,24 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'Add a comment…'**
   String get addCommentHint;
+
+  /// No description provided for @reportSentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Report sent'**
+  String get reportSentLabel;
+
+  /// No description provided for @reportErrorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Error sending report'**
+  String get reportErrorLabel;
+
+  /// No description provided for @reportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get reportLabel;
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {

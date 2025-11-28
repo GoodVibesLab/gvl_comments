@@ -116,6 +116,22 @@ class CommentsKit {
     return CommentModel.fromJson(json as Map<String, dynamic>);
   }
 
+    Future<void> report({
+    required String commentId,
+    required UserProfile user,
+    String? reason,
+  }) async {
+    final bearer = await _getBearer(user: user);
+    await _http.postJson(
+      _config.apiBase.resolve('comments/report'),
+      {
+        'commentId': commentId,
+        if (reason != null) 'reason': reason,
+      },
+      headers: {'Authorization': 'Bearer $bearer'},
+    );
+  }
+
   /// Best-effort profile sync (name / avatar) based on the JWT.
   Future<void> identify(UserProfile user) async {
     try {

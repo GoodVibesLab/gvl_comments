@@ -16,4 +16,13 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
 
   @override
   String get addCommentHint => 'Add a comment…';
+
+  @override
+  String get reportSentLabel => 'Report sent';
+
+  @override
+  String get reportErrorLabel => 'Error sending report';
+
+  @override
+  String get reportLabel => 'Report';
 }

@@ -205,6 +205,39 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     }
   }
 
+  Future<void> _onReportComment(CommentModel comment) async {
+    try {
+      final kit = CommentsKit.I();
+      await kit.report(
+        commentId: comment.id,
+        user: widget.user,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              GvlCommentsL10n.of(context)?.reportSentLabel ??
+                  'Comment reported',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('gvl_comments: error while reporting comment ${comment.id}: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              GvlCommentsL10n.of(context)?.reportErrorLabel ??
+                  'Unable to report comment',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
@@ -293,18 +326,50 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                 final c = comments[i];
                 final isMine = c.externalUserId == widget.user.id;
 
+                Widget item;
                 if (widget.commentItemBuilder != null) {
-                  return widget.commentItemBuilder!(
+                  item = widget.commentItemBuilder!(
                     ctx,
                     c,
                     GvlCommentMeta(isMine: isMine),
                   );
+                } else {
+                  item = _DefaultCommentItem(
+                    comment: c,
+                    isMine: isMine,
+                    alignment: widget.alignment,
+                    avatarBuilder: widget.avatarBuilder,
+                  );
                 }
-                return _DefaultCommentItem(
-                  comment: c,
-                  isMine: isMine,
-                  alignment: widget.alignment,
-                  avatarBuilder: widget.avatarBuilder,
+
+                return Stack(
+                  children: [
+                    item,
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(
+                          Icons.more_vert,
+                          size: 18,
+                        ),
+                        onSelected: (value) {
+                          if (value == 'report') {
+                            _onReportComment(c);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem<String>(
+                            value: 'report',
+                            child: Text(
+                              GvlCommentsL10n.of(context)?.reportLabel ??
+                                  'Report',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
