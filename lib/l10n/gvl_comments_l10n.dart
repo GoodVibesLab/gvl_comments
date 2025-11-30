@@ -129,6 +129,12 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'Report'**
   String get reportLabel;
+
+  /// No description provided for @alreadyReportedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'You already reported this comment'**
+  String get alreadyReportedLabel;
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {

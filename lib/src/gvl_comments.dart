@@ -116,13 +116,16 @@ class CommentsKit {
     return CommentModel.fromJson(json as Map<String, dynamic>);
   }
 
-    Future<void> report({
+  /// Reports a comment.
+  /// Returns true if this comment was already reported by this user (duplicate),
+  /// false if this is a fresh report.
+  Future<bool> report({
     required String commentId,
     required UserProfile user,
     String? reason,
   }) async {
     final bearer = await _getBearer(user: user);
-    await _http.postJson(
+    final json = await _http.postJson(
       _config.apiBase.resolve('comments/report'),
       {
         'commentId': commentId,
@@ -130,6 +133,15 @@ class CommentsKit {
       },
       headers: {'Authorization': 'Bearer $bearer'},
     );
+
+    // Two possible shapes:
+    // - duplicate: { "status": "ok", "duplicate": true }
+    // - fresh: [ { ... row from comment_reports ... } ]
+    if (json is Map<String, dynamic>) {
+      return json['duplicate'] == true;
+    }
+
+    return false;
   }
 
   /// Best-effort profile sync (name / avatar) based on the JWT.

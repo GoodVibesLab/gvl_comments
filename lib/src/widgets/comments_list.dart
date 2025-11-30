@@ -208,17 +208,20 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   Future<void> _onReportComment(CommentModel comment) async {
     try {
       final kit = CommentsKit.I();
-      await kit.report(
+      final isDuplicate = await kit.report(
         commentId: comment.id,
         user: widget.user,
       );
 
       if (mounted) {
+        final l10n = GvlCommentsL10n.of(context);
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              GvlCommentsL10n.of(context)?.reportSentLabel ??
-                  'Comment reported',
+              isDuplicate
+                  ? (l10n?.alreadyReportedLabel ?? 'You already reported this comment')
+                  : (l10n?.reportSentLabel ?? 'Comment reported'),
             ),
           ),
         );
