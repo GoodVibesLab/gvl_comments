@@ -139,7 +139,7 @@ abstract class GvlCommentsL10n {
   /// No description provided for @reportedPlaceholderLabel.
   ///
   /// In en, this message translates to:
-  /// **'This comment has been reported'**
+  /// **'⚠ This comment has been reported'**
   String get reportedPlaceholderLabel;
 }
 
