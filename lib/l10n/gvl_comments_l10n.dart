@@ -135,6 +135,12 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'You already reported this comment'**
   String get alreadyReportedLabel;
+
+  /// No description provided for @reportedPlaceholderLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'This comment has been reported'**
+  String get reportedPlaceholderLabel;
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {

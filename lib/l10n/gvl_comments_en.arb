@@ -6,5 +6,6 @@
   "reportSentLabel": "Report sent",
   "reportErrorLabel": "Error sending report",
   "reportLabel": "Report",
-  "alreadyReportedLabel": "You already reported this comment"
+  "alreadyReportedLabel": "You already reported this comment",
+  "reportedPlaceholderLabel": "This comment has been reported"
 }

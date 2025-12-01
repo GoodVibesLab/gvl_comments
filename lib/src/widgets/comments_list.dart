@@ -297,7 +297,10 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       );
     }
 
-    final comments = _comments ?? [];
+    final rawComments = _comments ?? [];
+    // Do not display hard-hidden comments (status == 'rejected').
+    final comments = rawComments.where((c) => !c.isHardHidden).toList();
+
     final padding = widget.padding ??
         EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
 
@@ -504,6 +507,7 @@ class _DefaultCommentItem extends StatelessWidget {
         ? (t.bubbleColor ?? cs.surfaceContainerHighest)
         : (t.bubbleAltColor ?? cs.surfaceContainer);
     final text = Theme.of(context).textTheme;
+    final l10n = GvlCommentsL10n.of(context);
 
     final bool alignRight = switch (alignment) {
       GvlCommentAlignment.right => true,
@@ -536,8 +540,13 @@ class _DefaultCommentItem extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                comment.body,
-                style: t.bodyStyle ?? text.bodyMedium,
+                comment.isSoftHidden
+                    ? (l10n?.reportedPlaceholderLabel ?? '')
+                    : comment.body,
+                style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                  fontStyle:
+                      comment.isSoftHidden ? FontStyle.italic : FontStyle.normal,
+                ),
               ),
             ],
           ),

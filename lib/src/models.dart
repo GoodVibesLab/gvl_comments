@@ -36,6 +36,12 @@ class CommentModel {
   /// Optional avatar URL associated with the author.
   final String? avatarUrl;
 
+  /// Whether this comment has been flagged (e.g. by reports or AI).
+  final bool isFlagged;
+
+  /// Moderation status of the comment ("pending", "approved", "rejected", ...).
+  final String status;
+
   CommentModel({
     required this.id,
     required this.externalUserId,
@@ -43,6 +49,8 @@ class CommentModel {
     required this.body,
     required this.createdAt,
     this.avatarUrl,
+    this.isFlagged = false,
+    this.status = 'pending',
   });
 
   factory CommentModel.fromJson(Map<String, dynamic> json) {
@@ -53,8 +61,16 @@ class CommentModel {
       body: json['body'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       avatarUrl: json['avatar_url_canonical'] as String?,
+      isFlagged: (json['is_flagged'] as bool?) ?? false,
+      status: (json['status'] as String?) ?? 'pending',
     );
   }
+
+  /// True when the comment should be visually soft-hidden (still present, but marked as reported).
+  bool get isSoftHidden => isFlagged && status != 'rejected';
+
+  /// True when the comment is considered hard-hidden and should typically not be shown.
+  bool get isHardHidden => status == 'rejected';
 }
 
 /// Representation of the current user interacting with the SDK.

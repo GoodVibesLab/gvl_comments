@@ -23,7 +23,7 @@ class DemoApp extends StatelessWidget {
         body: GvlCommentsList(
           threadKey: 'post:123',
           user: UserProfile(
-            id: 'user_1',
+            id: 'user_9',
             name: 'Joris43',
             avatarUrl:
                 'https://robohash.org/58266d40197a5e045353e8faad9368a9?set=set4&bgset=&size=400x400',

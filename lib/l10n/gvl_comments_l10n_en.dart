@@ -28,4 +28,7 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
 
   @override
   String get alreadyReportedLabel => 'You already reported this comment';
+
+  @override
+  String get reportedPlaceholderLabel => 'This comment has been reported';
 }
