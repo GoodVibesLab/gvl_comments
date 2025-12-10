@@ -101,6 +101,8 @@ class CommentsKit {
       headers: {'Authorization': 'Bearer $bearer'},
     );
 
+    debugPrint('gvl_comments: moderation settings: $json');
+
     final settings = ModerationSettings.fromJson(json);
     _cachedSettings = settings;
     return settings;
