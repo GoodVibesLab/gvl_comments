@@ -132,3 +132,46 @@ class UserProfile {
   /// Creates a new profile instance used throughout the widget tree.
   const UserProfile({required this.id, this.name, this.avatarUrl});
 }
+
+/// Moderation settings exposed by the backend for the current tenant.
+class ModerationSettings {
+  /// Whether end-users are allowed to report comments.
+  final bool userReportsEnabled;
+
+  /// Number of distinct reports before a comment is soft hidden.
+  final int softHideAfterReports;
+
+  /// Number of distinct reports before a comment is hard hidden.
+  final int hardHideAfterReports;
+
+  /// AI moderation mode (e.g. "none", "basic", "strict").
+  final String aiMode;
+
+  /// Whether the AI is allowed to auto-flag comments.
+  final bool aiAutoFlag;
+
+  /// Sensitivity threshold for AI moderation (0.0–1.0).
+  final double aiSensitivity;
+
+  const ModerationSettings({
+    required this.userReportsEnabled,
+    required this.softHideAfterReports,
+    required this.hardHideAfterReports,
+    required this.aiMode,
+    required this.aiAutoFlag,
+    required this.aiSensitivity,
+  });
+
+  factory ModerationSettings.fromJson(Map<String, dynamic> json) {
+    return ModerationSettings(
+      userReportsEnabled: json['userReportsEnabled'] as bool? ?? true,
+      softHideAfterReports:
+      (json['softHideAfterReports'] as num?)?.toInt() ?? 3,
+      hardHideAfterReports:
+      (json['hardHideAfterReports'] as num?)?.toInt() ?? 10,
+      aiMode: json['aiMode'] as String? ?? 'none',
+      aiAutoFlag: json['aiAutoFlag'] as bool? ?? true,
+      aiSensitivity: (json['aiSensitivity'] as num?)?.toDouble() ?? 0.5,
+    );
+  }
+}

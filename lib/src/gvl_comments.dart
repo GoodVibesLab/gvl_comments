@@ -24,6 +24,8 @@ class CommentsKit {
   final ApiClient _http;
   final TokenStore _tokens = TokenStore();
 
+  ModerationSettings? _cachedSettings;
+
   CommentsKit._(this._config, this._http);
 
   /// Minimal initialization with install key only.
@@ -40,7 +42,10 @@ class CommentsKit {
   }
 
   /// Clears the cached JWT (for example when the user changes).
-  void invalidateToken() => _tokens.clear();
+  void invalidateToken() {
+    _tokens.clear();
+    _cachedSettings = null;
+  }
 
   // ===== Internal =====
 
@@ -78,6 +83,28 @@ class CommentsKit {
   }
 
   // ===== Public SDK =====
+
+  /// Fetches moderation settings for the current tenant.
+  ///
+  /// The result is cached in memory for the lifetime of the process. It is
+  /// cleared when [invalidateToken] is called (for example when the user
+  /// changes or you want to force a refresh).
+  Future<ModerationSettings> getModerationSettings({
+    UserProfile? user,
+  }) async {
+    if (_cachedSettings != null) return _cachedSettings!;
+
+    final bearer = await _getBearer(user: user);
+
+    final json = await _http.getJson(
+      _config.apiBase.resolve('comments/settings'),
+      headers: {'Authorization': 'Bearer $bearer'},
+    );
+
+    final settings = ModerationSettings.fromJson(json);
+    _cachedSettings = settings;
+    return settings;
+  }
 
   /// Lists comments for a thread key.
   ///

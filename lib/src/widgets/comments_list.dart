@@ -83,6 +83,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   bool _hasMore = true;
   String? _beforeCursor;
 
+  bool _userReportsEnabled = true;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -119,6 +121,20 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       await kit.identify(widget.user);
     } catch (e) {
       debugPrint('gvl_comments: error during identify(): $e');
+    }
+
+    // Fetch moderation settings (best-effort).
+    try {
+      final settings =
+      await kit.getModerationSettings(user: widget.user);
+      if (mounted) {
+        setState(() {
+          _userReportsEnabled = settings.userReportsEnabled;
+        });
+      }
+    } catch (e) {
+      debugPrint('gvl_comments: error while loading moderation settings: $e');
+      // On error, we keep the default = true (reports enabled).
     }
 
     await _load();
@@ -377,30 +393,31 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                 return Stack(
                   children: [
                     item,
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: PopupMenuButton<String>(
-                        icon: const Icon(
-                          Icons.more_vert,
-                          size: 18,
-                        ),
-                        onSelected: (value) {
-                          if (value == 'report') {
-                            _onReportComment(c);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem<String>(
-                            value: 'report',
-                            child: Text(
-                              GvlCommentsL10n.of(context)?.reportLabel ??
-                                  'Report',
-                            ),
+                    if (_userReportsEnabled)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: PopupMenuButton<String>(
+                          icon: const Icon(
+                            Icons.more_vert,
+                            size: 18,
                           ),
-                        ],
+                          onSelected: (value) {
+                            if (value == 'report') {
+                              _onReportComment(c);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem<String>(
+                              value: 'report',
+                              child: Text(
+                                GvlCommentsL10n.of(context)?.reportLabel ??
+                                    'Report',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 );
               },
