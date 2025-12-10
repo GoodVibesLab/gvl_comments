@@ -23,9 +23,9 @@ class DemoApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(title: const Text('GVL Comments Demo')),
         body: GvlCommentsList(
-          threadKey: 'post:123',
+          threadKey: 'post:test',
           user: UserProfile(
-            id: 'user_15',
+            id: 'user_14',
             name: 'Joris43',
             avatarUrl:
                 'https://robohash.org/58266d40197a5e045353e8faad9368a9?set=set4&bgset=&size=400x400',

@@ -264,7 +264,6 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   }
 
   Widget _buildContent(BuildContext context) {
-    super.build(context);
 
     final l10n = GvlCommentsL10n.of(context);
     final t = GvlCommentsTheme.of(context);
@@ -297,9 +296,9 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       );
     }
 
-    final rawComments = _comments ?? [];
-    // Do not display hard-hidden comments (status == 'rejected').
-    final comments = rawComments.where((c) => !c.isHardHidden).toList();
+    // All comments returned by the API are safe to render.
+    // Server-side RLS / views already hide hard-deleted comments.
+    final comments = _comments ?? [];
 
     final padding = widget.padding ??
         EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
@@ -475,12 +474,30 @@ class _GvlCommentsListState extends State<GvlCommentsList>
             : TextButton(
           onPressed: _loadMore,
           child: Text(
-             'Load previous comments',
+            l10n?.loadPreviousCommentsLabel ??
+                'Load previous comments',
           ),
         ),
       ),
     );
   }
+}
+
+String _commentDisplayText(CommentModel comment, GvlCommentsL10n? l10n) {
+  // Moderated comments: content should be replaced by a generic message.
+  if (comment.isModerated) {
+    return l10n?.moderatedPlaceholderLabel ??
+        'This comment has been moderated.';
+  }
+
+  // Reported-but-pending comments: show a "reported" placeholder.
+  if (comment.isReported) {
+    return l10n?.reportedPlaceholderLabel ??
+        'This comment has been reported.';
+  }
+
+  // Normal case: show the raw body.
+  return comment.body;
 }
 
 /// Default comment item (bubble + optional avatar).
@@ -523,7 +540,7 @@ class _DefaultCommentItem extends StatelessWidget {
       elevation: t.elevation ?? 0,
       shape: RoundedRectangleBorder(
         borderRadius:
-        t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
+            t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
@@ -531,7 +548,7 @@ class _DefaultCommentItem extends StatelessWidget {
           padding: EdgeInsets.all((t.spacing ?? 8) + 4),
           child: Column(
             crossAxisAlignment:
-            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               Text(
                 comment.authorName ?? comment.externalUserId,
@@ -540,12 +557,11 @@ class _DefaultCommentItem extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                comment.isSoftHidden
-                    ? (l10n?.reportedPlaceholderLabel ?? '')
-                    : comment.body,
+                _commentDisplayText(comment, l10n),
                 style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                  fontStyle:
-                      comment.isSoftHidden ? FontStyle.italic : FontStyle.normal,
+                  fontStyle: comment.isVisibleNormally
+                      ? FontStyle.normal
+                      : FontStyle.italic,
                 ),
               ),
             ],

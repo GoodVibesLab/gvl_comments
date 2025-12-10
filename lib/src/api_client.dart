@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'package:http/http.dart' as http;
 
 /// Minimal HTTP helper for the Comments SDK.
@@ -36,19 +37,40 @@ class ApiClient {
     throw HttpException(res.statusCode, res.body);
   }
 
-  Future<List<dynamic>> getList(Uri url, {Map<String, String>? headers}) async {
+  Future<List<Map<String, dynamic>>> getList(
+      Uri url, {
+        Map<String, String>? headers,
+      }) async {
+    log(headers?['Authorization'] ?? 'no auth');
     final res = await _http.get(url, headers: headers);
+
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      return jsonDecode(res.body) as List<dynamic>;
+      if (res.body.isEmpty) return const [];
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>() // filtre au cas où
+            .map<Map<String, dynamic>>(
+                (m) => Map<String, dynamic>.from(m as Map))
+            .toList();
+      }
+      throw StateError('Expected a JSON array, got: ${res.body}');
     }
     throw HttpException(res.statusCode, res.body);
   }
 
-  Future<Map<String, dynamic>> getJson(Uri url,
-      {Map<String, String>? headers}) async {
+  Future<Map<String, dynamic>> getJson(
+      Uri url, {
+        Map<String, String>? headers,
+      }) async {
     final res = await _http.get(url, headers: headers);
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.body.isEmpty) return {};
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      throw StateError('Expected a JSON object, got: ${res.body}');
     }
     throw HttpException(res.statusCode, res.body);
   }

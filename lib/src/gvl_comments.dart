@@ -137,11 +137,7 @@ class CommentsKit {
     // Two possible shapes:
     // - duplicate: { "status": "ok", "duplicate": true }
     // - fresh: [ { ... row from comment_reports ... } ]
-    if (json is Map<String, dynamic>) {
-      return json['duplicate'] == true;
-    }
-
-    return false;
+    return json['duplicate'] == true;
   }
 
   /// Best-effort profile sync (name / avatar) based on the JWT.

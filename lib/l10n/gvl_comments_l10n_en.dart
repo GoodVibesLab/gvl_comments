@@ -31,4 +31,10 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
 
   @override
   String get reportedPlaceholderLabel => '⚠ This comment has been reported';
+
+  @override
+  String get moderatedPlaceholderLabel => '⚠ This comment has been moderated';
+
+  @override
+  String get loadPreviousCommentsLabel => 'Load previous comments';
 }

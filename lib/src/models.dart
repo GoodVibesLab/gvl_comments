@@ -16,33 +16,42 @@ class CommentsConfig {
   });
 }
 
-/// Comment returned by the API and rendered by the widgets.
+/// Model representing a single comment returned by the Comments API.
 class CommentModel {
   /// Unique identifier for the comment.
   final String id;
 
-  /// Identifier of the author supplied by the host app.
+  /// Identifier of the end-user who authored the comment.
   final String externalUserId;
 
-  /// Optional author display name.
+  /// Optional display name for the author.
   final String? authorName;
 
-  /// Body of the comment.
+  /// Raw body text of the comment.
+  /// May be hidden in the UI depending on moderation status.
   final String body;
 
-  /// Creation timestamp for the comment.
+  /// Timestamp when the comment was created.
   final DateTime createdAt;
 
-  /// Optional avatar URL associated with the author.
+  /// Optional avatar URL for the author.
   final String? avatarUrl;
 
-  /// Whether this comment has been flagged (e.g. by reports or AI).
+  /// Whether this comment has been flagged by AI or user reports.
+  ///
+  /// Flagged comments are still visible, but may trigger a "reported"
+  /// state depending on the moderation status.
   final bool isFlagged;
 
-  /// Moderation status of the comment ("pending", "approved", "rejected", ...).
+  /// Moderation status for the comment.
+  ///
+  /// Possible values include:
+  /// - `"pending"`   → awaiting moderation
+  /// - `"approved"`  → safe and fully visible
+  /// - `"rejected"`  → moderated; content should be hidden in the UI
   final String status;
 
-  CommentModel({
+  const CommentModel({
     required this.id,
     required this.externalUserId,
     this.authorName,
@@ -53,24 +62,42 @@ class CommentModel {
     this.status = 'pending',
   });
 
+  /// Factory constructor for JSON deserialization.
   factory CommentModel.fromJson(Map<String, dynamic> json) {
     return CommentModel(
       id: json['id'] as String,
       externalUserId: json['external_user_id'] as String,
       authorName: json['author_name'] as String?,
-      body: json['body'] as String,
+      body: json['body'] as String? ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       avatarUrl: json['avatar_url_canonical'] as String?,
-      isFlagged: (json['is_flagged'] as bool?) ?? false,
-      status: (json['status'] as String?) ?? 'pending',
+      isFlagged: json['is_flagged'] as bool? ?? false,
+      status: json['status'] as String? ?? 'pending',
     );
   }
 
-  /// True when the comment should be visually soft-hidden (still present, but marked as reported).
-  bool get isSoftHidden => isFlagged && status != 'rejected';
+  // ---------------------------------------------------------------------------
+  // Moderation helpers
+  // ---------------------------------------------------------------------------
 
-  /// True when the comment is considered hard-hidden and should typically not be shown.
-  bool get isHardHidden => status == 'rejected';
+  /// Returns `true` if the comment has been flagged (by AI or reports)
+  /// **and** is still pending moderation.
+  ///
+  /// In this case, the UI should replace the comment body with a message such as:
+  /// *"This comment has been reported."*
+  bool get isReported => status == 'pending' && isFlagged;
+
+  /// Returns `true` if the comment has been explicitly moderated and marked
+  /// as `"rejected"`.
+  ///
+  /// Rejected comments remain visible in the thread structure, but their
+  /// content must be replaced by:
+  /// *"This comment has been moderated."*
+  bool get isModerated => status == 'rejected';
+
+  /// Returns `true` when the comment body can be displayed as-is
+  /// (i.e. the comment is neither reported nor moderated).
+  bool get isVisibleNormally => !isReported && !isModerated;
 }
 
 /// Representation of the current user interacting with the SDK.

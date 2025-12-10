@@ -141,6 +141,18 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'⚠ This comment has been reported'**
   String get reportedPlaceholderLabel;
+
+  /// No description provided for @moderatedPlaceholderLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠ This comment has been moderated'**
+  String get moderatedPlaceholderLabel;
+
+  /// No description provided for @loadPreviousCommentsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Load previous comments'**
+  String get loadPreviousCommentsLabel;
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {
