@@ -1,4 +1,7 @@
 /// Minimal configuration passed when loading comments for a user.
+///
+/// This model is used by [CommentsKit.listByThreadKey] and [CommentsKit.post]
+/// to authenticate API calls on behalf of the end-user.
 class CommentsConfig {
   /// Your GoodVibesLab project API key (starts with `cmt_live_`).
   final String installKey;
@@ -9,6 +12,11 @@ class CommentsConfig {
   /// Optional display name for this user.
   final String? externalUserName;
 
+  /// Builds a new configuration object.
+  ///
+  /// * [installKey] is the project key provided by GoodVibesLab.
+  /// * [externalUserId] uniquely identifies the user in your system.
+  /// * [externalUserName] optionally provides a friendly display name.
   const CommentsConfig({
     required this.installKey,
     required this.externalUserId,
@@ -18,6 +26,7 @@ class CommentsConfig {
 
 /// Model representing a single comment returned by the Comments API.
 class CommentModel {
+  /// Creates an immutable comment model.
   /// Unique identifier for the comment.
   final String id;
 
@@ -51,6 +60,7 @@ class CommentModel {
   /// - `"rejected"`  → moderated; content should be hidden in the UI
   final String status;
 
+  /// Creates an immutable comment model with optional author details.
   const CommentModel({
     required this.id,
     required this.externalUserId,
@@ -63,6 +73,9 @@ class CommentModel {
   });
 
   /// Factory constructor for JSON deserialization.
+  ///
+  /// Missing values default to safe fallbacks, keeping the object usable even
+  /// when the backend omits optional fields.
   factory CommentModel.fromJson(Map<String, dynamic> json) {
     return CommentModel(
       id: json['id'] as String,
@@ -83,8 +96,9 @@ class CommentModel {
   /// Returns `true` if the comment has been flagged (by AI or reports)
   /// **and** is still pending moderation.
   ///
-  /// In this case, the UI should replace the comment body with a message such as:
-  /// *"This comment has been reported."*
+  /// In this case, the UI should replace the comment body with a message such as
+  /// *"This comment has been reported."*. Flagged comments remain in the
+  /// thread so the conversation structure is preserved.
   bool get isReported => status == 'pending' && isFlagged;
 
   /// Returns `true` if the comment has been explicitly moderated and marked
@@ -97,11 +111,15 @@ class CommentModel {
 
   /// Returns `true` when the comment body can be displayed as-is
   /// (i.e. the comment is neither reported nor moderated).
+  ///
+  /// Use this property to decide whether to render [body] or an alternate
+  /// placeholder in your UI.
   bool get isVisibleNormally => !isReported && !isModerated;
 }
 
 /// Representation of the current user interacting with the SDK.
 class UserProfile {
+  /// Builds a local user profile synchronized with the backend when necessary.
   /// Stable identifier for the user.
   final String id;
 
@@ -111,5 +129,6 @@ class UserProfile {
   /// Optional avatar URL for the user.
   final String? avatarUrl;
 
+  /// Creates a new profile instance used throughout the widget tree.
   const UserProfile({required this.id, this.name, this.avatarUrl});
 }

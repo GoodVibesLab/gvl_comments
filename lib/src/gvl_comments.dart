@@ -8,8 +8,16 @@ import 'token_store.dart';
 import 'comments_config.dart';
 
 /// High-level entry point for interacting with GoodVibesLab comments.
+///
+/// Use [initialize] once during app startup, then access the singleton via
+/// [CommentsKit.I]. All network operations are routed through this instance.
 class CommentsKit {
   static CommentsKit? _instance;
+
+  /// Returns the previously initialized singleton instance.
+  ///
+  /// Call [initialize] before invoking this method. Accessing [I] without prior
+  /// initialization will throw a runtime error.
   static CommentsKit I() => _instance!;
 
   final CommentsConfig _config;
@@ -19,6 +27,10 @@ class CommentsKit {
   CommentsKit._(this._config, this._http);
 
   /// Minimal initialization with install key only.
+  ///
+  /// Provide your GoodVibesLab [installKey] and an optional custom [httpClient]
+  /// if you need advanced networking controls (for example interceptors or
+  /// caching). Must be awaited before using [CommentsKit.I].
   static Future<void> initialize({
     required String installKey,
     http.Client? httpClient,
@@ -67,16 +79,19 @@ class CommentsKit {
 
   // ===== Public SDK =====
 
-  /// List comments for a thread key.
+  /// Lists comments for a thread key.
   ///
-  /// [before] is an optional ISO-8601 cursor (created_at). If provided,
-  /// only comments with created_at < before are returned.
+  /// [before] is an optional ISO-8601 cursor (created_at). If provided, only
+  /// comments with a `created_at` timestamp earlier than [before] are returned.
+  /// This method handles pagination and returns comments in reverse
+  /// chronological order. [limit] controls the maximum number of comments to
+  /// retrieve per call. Throws when network calls fail.
   Future<List<CommentModel>> listByThreadKey(
       String threadKey, {
         required UserProfile user,
         int limit = 50,
         String? before,
-      }) async {
+  }) async {
     final bearer = await _getBearer(user: user);
     debugPrint('gvl_comments: apiBase=${_config.apiBase}');
 
@@ -99,6 +114,12 @@ class CommentsKit {
         .toList();
   }
 
+  /// Posts a new comment in the specified thread.
+  ///
+  /// The comment body is sent as-is; perform validation in your UI before
+  /// calling this method. Returns the created [CommentModel] populated with
+  /// server timestamps and moderation status. Requires the calling [user] to be
+  /// authenticated via [initialize].
   Future<CommentModel> post({
     required String threadKey,
     required String body,
@@ -117,8 +138,9 @@ class CommentsKit {
   }
 
   /// Reports a comment.
-  /// Returns true if this comment was already reported by this user (duplicate),
-  /// false if this is a fresh report.
+  ///
+  /// Returns `true` if this comment was already reported by the same user
+  /// (duplicate), `false` if the report was freshly recorded by the backend.
   Future<bool> report({
     required String commentId,
     required UserProfile user,
@@ -141,6 +163,9 @@ class CommentsKit {
   }
 
   /// Best-effort profile sync (name / avatar) based on the JWT.
+  ///
+  /// The call is intentionally resilient: errors are logged but not thrown to
+  /// avoid disrupting the user experience.
   Future<void> identify(UserProfile user) async {
     try {
       final bearer = await _getBearer(user: user);

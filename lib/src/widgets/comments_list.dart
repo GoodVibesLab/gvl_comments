@@ -4,25 +4,52 @@ import '../gvl_comments.dart';
 import '../models.dart';
 
 /// Ready-to-use comment thread widget with pagination and a composer.
+///
+/// The widget renders a vertically scrolling list of comments for [threadKey]
+/// and exposes builder hooks to customize avatars, bubbles, and the composer.
+/// It fetches data through [CommentsKit] and keeps pagination state internally.
 class GvlCommentsList extends StatefulWidget {
+  /// Unique identifier for the thread to display.
   final String threadKey;
+
+  /// Profile of the active user used for authentication and author metadata.
   final UserProfile user;
 
+  /// Optional builder to fully override how each comment is rendered.
   final CommentItemBuilder? commentItemBuilder;
+
+  /// Builder for the avatar widget displayed next to a comment.
   final AvatarBuilder? avatarBuilder;
+
+  /// Builder for the send button inside the composer.
   final SendButtonBuilder? sendButtonBuilder;
+
+  /// Builder to replace the default composer entirely.
   final ComposerBuilder? composerBuilder;
+
+  /// Builder for separators between list items.
   final SeparatorBuilder? separatorBuilder;
 
+  /// Controls bubble alignment in the list.
   final GvlCommentAlignment alignment;
 
+  /// Maximum number of comments fetched per page.
   final int limit;
+
+  /// Padding applied around the scrollable list.
   final EdgeInsetsGeometry? padding;
+
+  /// Optional scroll controller that allows programmatic scrolling.
   final ScrollController? scrollController;
 
   /// Optional local theme override for this widget.
   final GvlCommentsThemeData? theme;
 
+  /// Creates a comments list bound to a thread and user profile.
+  ///
+  /// Provide builder callbacks to customize rendering; otherwise sensible
+  /// defaults are used. Set [alignment] to [GvlCommentAlignment.autoByUser] to
+  /// mirror chat-like alignment.
   const GvlCommentsList({
     super.key,
     required this.threadKey,
@@ -613,12 +640,23 @@ class _DefaultCommentItem extends StatelessWidget {
 }
 
 /// Metadata passed to builders to customize rendering.
+///
+/// Indicates whether the comment belongs to the current user and exposes basic
+/// interaction callbacks that can be forwarded to custom widgets.
 class GvlCommentMeta {
+  /// Whether the comment was authored by the active user.
   final bool isMine;
+
+  /// Whether the comment is currently being sent and not yet confirmed.
   final bool isSending;
+
+  /// Optional handler for long-press interactions (for example opening a menu).
   final VoidCallback? onLongPress;
+
+  /// Optional handler for tap interactions.
   final VoidCallback? onTap;
 
+  /// Creates metadata for a comment item.
   const GvlCommentMeta({
     required this.isMine,
     this.isSending = false,
@@ -627,22 +665,26 @@ class GvlCommentMeta {
   });
 }
 
+/// Signature for building a single comment widget.
 typedef CommentItemBuilder = Widget Function(
     BuildContext context,
     CommentModel comment,
     GvlCommentMeta meta,
     );
 
+/// Signature for building separators between list items.
 typedef SeparatorBuilder = Widget Function(
     BuildContext context,
     );
 
+/// Signature for building avatar widgets.
 typedef AvatarBuilder = Widget Function(
     BuildContext context,
     CommentModel comment,
     double size,
     );
 
+/// Signature for building a custom send button.
 typedef SendButtonBuilder = Widget Function(
     BuildContext context,
     VoidCallback onPressed,
@@ -650,6 +692,9 @@ typedef SendButtonBuilder = Widget Function(
     );
 
 /// Allows replacing the whole composer (input + send button).
+///
+/// The builder receives the current [TextEditingController], callbacks for
+/// submit actions, and the computed maximum line count for the text field.
 typedef ComposerBuilder = Widget Function(
     BuildContext context, {
     required TextEditingController controller,
@@ -659,33 +704,61 @@ typedef ComposerBuilder = Widget Function(
     required String hintText,
     });
 
+/// Theme extension used to style the comments list and composer.
 @immutable
 class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
-  // Colors
+  /// Background color for comments authored by the current user.
   final Color? bubbleColor;
+
+  /// Background color for comments authored by other users.
   final Color? bubbleAltColor;
+
+  /// Color applied behind the list (gutter/background).
   final Color? gutterColor;
+
+  /// Color used for badges such as moderation markers.
   final Color? badgeColor;
+
+  /// Color used for error text and indicators.
   final Color? errorColor;
 
-  // Typography
+  /// Text style for author names.
   final TextStyle? authorStyle;
+
+  /// Text style for comment bodies.
   final TextStyle? bodyStyle;
+
+  /// Text style for timestamps.
   final TextStyle? timestampStyle;
+
+  /// Text style used to display errors.
   final TextStyle? errorStyle;
+
+  /// Text style for placeholder or hint text.
   final TextStyle? hintStyle;
+
+  /// Text style for action buttons such as “Send”.
   final TextStyle? buttonStyle;
 
-  // Layout / sizes
+  /// Base spacing unit used for paddings and gaps.
   final double? spacing;
+
+  /// Avatar size in logical pixels.
   final double? avatarSize;
+
+  /// Corner radii applied to comment bubbles.
   final BorderRadius? bubbleRadius;
+
+  /// Shape used for the composer input.
   final OutlinedBorder? composerShape;
+
+  /// Elevation applied to bubbles.
   final double? elevation;
 
-  // Behavior
+  /// Maximum number of visible lines in the composer before scrolling.
   final int? composerMaxLines;
 
+  /// Creates theme data for the comments experience.
   const GvlCommentsThemeData({
     this.bubbleColor,
     this.bubbleAltColor,
@@ -707,6 +780,9 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   });
 
   /// Baseline theme tuned for comment threads.
+  ///
+  /// Uses the ambient [ThemeData] to derive colors and typography, providing a
+  /// sensible starting point for most apps.
   factory GvlCommentsThemeData.defaults(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -739,6 +815,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
+  /// Neutral preset with minimal decoration suitable for dense layouts.
   factory GvlCommentsThemeData.neutral(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
     return base.copyWith(
@@ -748,6 +825,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
+  /// Compact preset that reduces spacing and typography sizes.
   factory GvlCommentsThemeData.compact(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
     return base.copyWith(
@@ -764,6 +842,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
+  /// Card-like preset with subtle elevation and equal bubble colors.
   factory GvlCommentsThemeData.card(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
     final cs = Theme.of(context).colorScheme;
@@ -777,6 +856,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
+  /// Playful preset with rounded “bubble” styling.
   factory GvlCommentsThemeData.bubble(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
     final cs = Theme.of(context).colorScheme;
@@ -793,6 +873,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
+  /// Combines two theme definitions, preferring non-null values from [other].
   GvlCommentsThemeData merge(GvlCommentsThemeData? other) {
     if (other == null) return this;
     return GvlCommentsThemeData(
@@ -817,6 +898,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   }
 
   @override
+  /// Returns a copy with selectively overridden properties.
   GvlCommentsThemeData copyWith({
     Color? bubbleColor,
     Color? bubbleAltColor,
@@ -858,6 +940,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   }
 
   @override
+  /// Linearly interpolates between two themes.
   ThemeExtension<GvlCommentsThemeData> lerp(
       ThemeExtension<GvlCommentsThemeData>? other,
       double t,
@@ -885,6 +968,8 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     );
   }
 
+  /// Helper to interpolate nullable doubles while preserving `null` when both
+  /// inputs are `null`.
   static double? lerpDoubleNullable(double? a, double? b, double t) {
     if (a == null && b == null) return null;
     return Tween<double>(begin: a ?? b ?? 0, end: b ?? a ?? 0)
@@ -894,6 +979,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
 
 /// Wrapper for local theme overrides.
 class GvlCommentsTheme extends InheritedWidget {
+  /// Theme data applied to descendant comments widgets.
   final GvlCommentsThemeData data;
 
   const GvlCommentsTheme({
@@ -902,6 +988,8 @@ class GvlCommentsTheme extends InheritedWidget {
     required Widget child,
   }) : super(key: key, child: child);
 
+  /// Resolves the effective theme by merging defaults, global extensions, and
+  /// the nearest [GvlCommentsTheme] ancestor.
   static GvlCommentsThemeData of(BuildContext context) {
     final local =
     context.dependOnInheritedWidgetOfExactType<GvlCommentsTheme>();
@@ -915,13 +1003,22 @@ class GvlCommentsTheme extends InheritedWidget {
       data != oldWidget.data;
 }
 
+/// Immutable bundle of localized strings used by the comments UI.
 @immutable
 class GvlCommentsStrings {
+  /// Title used for error banners.
   final String errorTitle;
+
+  /// Label for retry actions.
   final String retry;
+
+  /// Label for the send button.
   final String send;
+
+  /// Placeholder displayed in the composer input.
   final String hintAddComment;
 
+  /// Creates a localized string bundle.
   const GvlCommentsStrings({
     required this.errorTitle,
     required this.retry,
@@ -929,6 +1026,7 @@ class GvlCommentsStrings {
     required this.hintAddComment,
   });
 
+  /// French localization for the built-in strings.
   factory GvlCommentsStrings.fr() => const GvlCommentsStrings(
     errorTitle: 'Erreur',
     retry: 'Réessayer',
@@ -936,6 +1034,7 @@ class GvlCommentsStrings {
     hintAddComment: 'Ajouter un commentaire…',
   );
 
+  /// English localization for the built-in strings.
   factory GvlCommentsStrings.en() => const GvlCommentsStrings(
     errorTitle: 'Error',
     retry: 'Retry',
@@ -943,6 +1042,7 @@ class GvlCommentsStrings {
     hintAddComment: 'Add a comment…',
   );
 
+  /// Returns a copy with selectively overridden labels.
   GvlCommentsStrings copyWith({
     String? errorTitle,
     String? retry,
@@ -959,4 +1059,9 @@ class GvlCommentsStrings {
 }
 
 /// Bubble alignment.
+///
+/// * [left] renders every comment starting from the left edge.
+/// * [right] aligns all comments to the right edge.
+/// * [autoByUser] aligns comments by author: current user on the right,
+///   others on the left.
 enum GvlCommentAlignment { left, right, autoByUser }
