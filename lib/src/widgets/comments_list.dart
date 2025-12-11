@@ -424,9 +424,55 @@ class _GvlCommentsListState extends State<GvlCommentsList>
             ),
           ),
         ),
+        _buildBrandingFooter(context),
         const Divider(height: 1),
         _buildComposer(context, t, l10n),
       ],
+    );
+  }
+
+  Widget _buildBrandingFooter(BuildContext context) {
+    final t = GvlCommentsTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final baseStyle =
+        (t.timestampStyle ?? textTheme.labelSmall) ?? const TextStyle();
+    final color =
+        (t.timestampStyle?.color ?? colorScheme.onSurfaceVariant).withOpacity(0.85);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: t.spacing ?? 8,
+        right: t.spacing ?? 8,
+        top: (t.spacing ?? 8) / 2,
+        bottom: (t.spacing ?? 8) / 2,
+      ),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_outlined,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Comments powered by ',
+              style: baseStyle.copyWith(color: color),
+            ),
+            Text(
+              'GVL Cloud',
+              style: baseStyle.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

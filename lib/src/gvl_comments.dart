@@ -28,6 +28,13 @@ class CommentsKit {
 
   CommentsKit._(this._config, this._http);
 
+  /// Current billing plan for this install (e.g. "free", "starter", "pro").
+  ///
+  /// The value is populated from the last successful `/token` call and cached
+  /// in memory alongside the access token. It becomes `null` again when
+  /// [invalidateToken] is called.
+  String? get currentPlan => _tokens.plan;
+
   /// Minimal initialization with install key only.
   ///
   /// Provide your GoodVibesLab [installKey] and an optional custom [httpClient]
@@ -78,7 +85,8 @@ class CommentsKit {
 
     final token = json['access_token'] as String;
     final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
-    _tokens.save(token, expiresIn);
+    final plan = json['plan'] as String?;
+    _tokens.save(token, expiresIn, plan: plan);
     return token;
   }
 
