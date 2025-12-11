@@ -137,3 +137,14 @@ For help, reach out at:
 ## 📝 License
 
 Commercial license, included with all GoodVibesLab paid plans. A free tier is also available for testing.
+
+---
+
+## 🗺️ Roadmap (non‑contractual)
+
+Planned upcoming enhancements include:
+
+- 📸 Image attachments (with storage, moderation & thumbnailing)
+- ❤️ Reactions on comments (like 👍 ❤️ 😂)
+
+These items are indicative only and may evolve based on customer demand.

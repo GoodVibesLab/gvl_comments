@@ -84,6 +84,12 @@ class _GvlCommentsListState extends State<GvlCommentsList>
 
   bool _userReportsEnabled = true;
 
+  // Track pending (optimistic) comments.
+  final Set<String> _pendingIds = <String>{};
+
+  // Track freshly created comments for entry animation.
+  final Set<String> _recentlyCreatedCommentIds = <String>{};
+
   @override
   bool get wantKeepAlive => true;
 
@@ -221,10 +227,34 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   Future<void> _send() async {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
+
     setState(() {
       _sending = true;
       _error = null;
     });
+
+    // Create a local temporary ID for optimistic UI.
+    final tempId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final now = DateTime.now().toUtc();
+
+    final pending = CommentModel(
+      id: tempId,
+      externalUserId: widget.user.id,
+      authorName: widget.user.name,
+      body: text,
+      createdAt: now,
+      avatarUrl: widget.user.avatarUrl,
+      isFlagged: false,
+      status: 'pending',
+    );
+
+    // Add optimistic comment.
+    setState(() {
+      _pendingIds.add(tempId);
+      _comments = [pending, ...(_comments ?? [])];
+      _ctrl.clear();
+    });
+
     try {
       final kit = CommentsKit.I();
       final created = await kit.post(
@@ -232,12 +262,24 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         body: text,
         user: widget.user,
       );
+
+      // Replace pending with actual.
       setState(() {
-        _comments = [created, ...(_comments ?? [])];
-        _ctrl.clear();
+        final list = _comments ?? <CommentModel>[];
+        final idx = list.indexWhere((c) => c.id == tempId);
+        if (idx != -1) {
+          list[idx] = created;
+        }
+        _comments = List<CommentModel>.from(list);
+        _pendingIds.remove(tempId);
       });
     } catch (e) {
+      // Remove optimistic bubble on failure.
       setState(() {
+        _comments = (_comments ?? <CommentModel>[])
+            .where((c) => c.id != tempId)
+            .toList();
+        _pendingIds.remove(tempId);
         _error = e.toString();
       });
     } finally {
@@ -381,24 +423,60 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                 final c = comments[i];
                 final isMine = c.externalUserId == widget.user.id;
 
-                Widget item;
+                // Build the raw comment item.
+                Widget baseItem;
                 if (widget.commentItemBuilder != null) {
-                  item = widget.commentItemBuilder!(
+                  baseItem = widget.commentItemBuilder!(
                     ctx,
                     c,
-                    GvlCommentMeta(isMine: isMine),
+                    GvlCommentMeta(
+                      isMine: isMine,
+                      isSending: _pendingIds.contains(c.id),
+                    ),
                   );
                 } else {
-                  item = _DefaultCommentItem(
+                  baseItem = _DefaultCommentItem(
                     comment: c,
                     isMine: isMine,
                     avatarBuilder: widget.avatarBuilder,
+                    isSending: _pendingIds.contains(c.id),
                   );
+                }
+
+                // Apply a subtle entry animation for freshly created comments.
+                final isJustCreated =
+                    _recentlyCreatedCommentIds.contains(c.id);
+
+                Widget animatedItem;
+                if (isJustCreated) {
+                  animatedItem = TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                    onEnd: () {
+                      if (!mounted) return;
+                      setState(() {
+                        _recentlyCreatedCommentIds.remove(c.id);
+                      });
+                    },
+                    builder: (context, value, child) {
+                      return Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - value) * 6),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: baseItem,
+                  );
+                } else {
+                  animatedItem = baseItem;
                 }
 
                 return Stack(
                   children: [
-                    item,
+                    animatedItem,
                     if (_userReportsEnabled)
                       Positioned(
                         top: 0,
@@ -556,8 +634,9 @@ class _GvlCommentsListState extends State<GvlCommentsList>
 
   Widget _buildSeparator(BuildContext context) {
     if (widget.separatorBuilder == null) {
+      final spacing = GvlCommentsTheme.of(context).spacing ?? 8;
       return SizedBox(
-        height: (GvlCommentsTheme.of(context).spacing ?? 8) / 2,
+        height: spacing * 0.75,
       );
     }
     return widget.separatorBuilder!(context);
@@ -669,12 +748,14 @@ class _DefaultCommentItem extends StatelessWidget {
   final CommentModel comment;
   final bool isMine;
   final AvatarBuilder? avatarBuilder;
+  final bool isSending;
 
   const _DefaultCommentItem({
     Key? key,
     required this.comment,
     required this.isMine,
     this.avatarBuilder,
+    this.isSending = false,
   }) : super(key: key);
 
   @override
@@ -694,6 +775,10 @@ class _DefaultCommentItem extends StatelessWidget {
     final avatarSize = t.avatarSize ?? 32;
     final showAvatars = t.showAvatars ?? true;
 
+    final tsBase = t.timestampStyle ?? text.bodySmall ?? const TextStyle(fontSize: 11);
+    final tsColor =
+        (t.timestampStyle?.color ?? cs.onSurfaceVariant).withOpacity(0.8);
+
     Widget? avatar;
     if (showAvatars) {
       if (avatarBuilder != null) {
@@ -701,79 +786,92 @@ class _DefaultCommentItem extends StatelessWidget {
       } else {
         final name = comment.authorName ?? comment.externalUserId;
         final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+        final avatarUrl = comment.avatarUrl?.trim();
 
-        avatar = CircleAvatar(
-          radius: avatarSize / 2,
-          child: Text(
-            initial,
-            style: text.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              fontSize: avatarSize / 2,
-            ),
-          ),
-        );
+        avatar = (avatarUrl != null && avatarUrl.isNotEmpty)
+            ? Image.network(
+                avatarUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _InitialsAvatar(
+                    initial: initial,
+                    textStyle: text.bodyMedium,
+                  );
+                },
+              )
+            : _InitialsAvatar(
+                initial: initial,
+                textStyle: text.bodyMedium,
+              );
       }
     }
 
-    final bubble = Material(
-      color: bg,
-      elevation: t.elevation ?? 0,
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: Padding(
-          padding: EdgeInsets.all((t.spacing ?? 8) + 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                comment.authorName ?? comment.externalUserId,
-                style: t.authorStyle ??
-                    text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-              ),
-              const SizedBox(height: 4),
-              RichText(
-                text: TextSpan(
-                  style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                    fontStyle: comment.isVisibleNormally
-                        ? FontStyle.normal
-                        : FontStyle.italic,
-                  ),
-                  children: _buildLinkedSpans(
-                    _commentDisplayText(comment, l10n),
-                    (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+    final bubble = Opacity(
+      opacity: isSending ? 0.55 : 1.0,
+      child: Material(
+        color: bg,
+        elevation: t.elevation ?? 0,
+        shape: RoundedRectangleBorder(
+          borderRadius:
+              t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: Padding(
+            padding: EdgeInsets.all((t.spacing ?? 8) + 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  comment.authorName ?? comment.externalUserId,
+                  style: t.authorStyle ??
+                      text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+                const SizedBox(height: 4),
+                RichText(
+                  text: TextSpan(
+                    style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
                       fontStyle: comment.isVisibleNormally
                           ? FontStyle.normal
                           : FontStyle.italic,
                     ),
+                    children: _buildLinkedSpans(
+                      _commentDisplayText(comment, l10n),
+                      (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                        fontStyle: comment.isVisibleNormally
+                            ? FontStyle.normal
+                            : FontStyle.italic,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  relativeTime,
-                  style: (t.timestampStyle ?? text.bodySmall) ??
-                      const TextStyle(fontSize: 10),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    relativeTime,
+                    style: tsBase.copyWith(
+                      fontSize: (tsBase.fontSize ?? 11) - 1,
+                      color: tsColor,
+                      letterSpacing: (tsBase.letterSpacing ?? 0) + 0.1,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
 
+    final baseSpacing = t.spacing ?? 8;
     return Padding(
       padding: EdgeInsets.symmetric(
-        vertical: (t.spacing ?? 8),
-        horizontal: (t.spacing ?? 8),
+        vertical: baseSpacing + 2,
+        horizontal: baseSpacing,
       ),
       child: Align(
         alignment: Alignment.centerLeft,
@@ -797,6 +895,32 @@ class _DefaultCommentItem extends StatelessWidget {
             ],
             Flexible(child: bubble),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InitialsAvatar extends StatelessWidget {
+  final String initial;
+  final TextStyle? textStyle;
+
+  const _InitialsAvatar({
+    required this.initial,
+    this.textStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: cs.secondaryContainer,
+      child: Center(
+        child: Text(
+          initial,
+          style: (textStyle ?? Theme.of(context).textTheme.bodyMedium)?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );

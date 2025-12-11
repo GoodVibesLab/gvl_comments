@@ -33,7 +33,6 @@ class DemoApp extends StatelessWidget {
           theme: GvlCommentsTheme.of(context).copyWith(
             avatarSize: 20.0,
             bubbleColor: Colors.blue.shade50,
-            showAvatars: false,
           ),
         ),
       ),

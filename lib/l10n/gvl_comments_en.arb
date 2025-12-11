@@ -13,8 +13,8 @@
   "timeJustNow": "Just now",
   "timeOneMinute": "1 min ago",
   "timeXMinutes": "{m} min ago",
-  "timeOneHour": "1 h ago",
-  "timeXHours": "{h} h ago",
+  "timeOneHour": "1h ago",
+  "timeXHours": "{h}h ago",
   "timeYesterday": "Yesterday",
   "timeXDays": "{d} days ago",
   "timeFallbackDate": "On {y}-{m}-{d}"
