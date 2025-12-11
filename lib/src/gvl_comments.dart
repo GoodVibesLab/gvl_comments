@@ -83,6 +83,9 @@ class CommentsKit {
       headers: headers,
     );
 
+    //TODO remove debugPrint
+    debugPrint('gvl_comments: obtained new token: $json');
+
     final token = json['access_token'] as String;
     final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
     final plan = json['plan'] as String?;

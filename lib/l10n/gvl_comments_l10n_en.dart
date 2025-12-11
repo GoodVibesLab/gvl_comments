@@ -37,4 +37,36 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
 
   @override
   String get loadPreviousCommentsLabel => 'Load previous comments';
+
+  @override
+  String get timeJustNow => 'Just now';
+
+  @override
+  String get timeOneMinute => '1 min ago';
+
+  @override
+  String timeXMinutes(Object m) {
+    return '$m min ago';
+  }
+
+  @override
+  String get timeOneHour => '1 h ago';
+
+  @override
+  String timeXHours(Object h) {
+    return '$h h ago';
+  }
+
+  @override
+  String get timeYesterday => 'Yesterday';
+
+  @override
+  String timeXDays(Object d) {
+    return '$d days ago';
+  }
+
+  @override
+  String timeFallbackDate(Object d, Object m, Object y) {
+    return 'On $y-$m-$d';
+  }
 }

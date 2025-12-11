@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../l10n/gvl_comments_l10n.dart';
 import '../gvl_comments.dart';
 import '../models.dart';
+import '../utils/time_utils.dart';
 
 /// Ready-to-use comment thread widget with pagination and a composer.
 ///
@@ -29,9 +32,6 @@ class GvlCommentsList extends StatefulWidget {
 
   /// Builder for separators between list items.
   final SeparatorBuilder? separatorBuilder;
-
-  /// Controls bubble alignment in the list.
-  final GvlCommentAlignment alignment;
 
   /// Maximum number of comments fetched per page.
   final int limit;
@@ -62,7 +62,6 @@ class GvlCommentsList extends StatefulWidget {
     this.limit = 50,
     this.padding,
     this.scrollController,
-    this.alignment = GvlCommentAlignment.left,
     this.theme,
   });
 
@@ -290,6 +289,14 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     super.dispose();
   }
 
+  Future<void> _openBrandingLink() async {
+    const url = 'https://www.goodvibeslab.cloud';
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -385,7 +392,6 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                   item = _DefaultCommentItem(
                     comment: c,
                     isMine: isMine,
-                    alignment: widget.alignment,
                     avatarBuilder: widget.avatarBuilder,
                   );
                 }
@@ -424,7 +430,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
             ),
           ),
         ),
-        _buildBrandingFooter(context),
+        if(CommentsKit.I().currentPlan != 'free')_buildBrandingFooter(context),
         const Divider(height: 1),
         _buildComposer(context, t, l10n),
       ],
@@ -439,7 +445,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     final baseStyle =
         (t.timestampStyle ?? textTheme.labelSmall) ?? const TextStyle();
     final color =
-        (t.timestampStyle?.color ?? colorScheme.onSurfaceVariant).withOpacity(0.85);
+    (t.timestampStyle?.color ?? colorScheme.onSurfaceVariant).withOpacity(0.85);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -450,27 +456,37 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       ),
       child: Align(
         alignment: Alignment.centerRight,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_outlined,
-              size: 14,
-              color: color,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Comments powered by ',
-              style: baseStyle.copyWith(color: color),
-            ),
-            Text(
-              'GVL Cloud',
-              style: baseStyle.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
+        child: InkWell(
+          onTap: _openBrandingLink,
+          borderRadius: BorderRadius.circular(999),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Comments powered by ',
+                style: baseStyle.copyWith(color: color),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Image.asset(
+                  'assets/gvl_cloud_logo.png',
+                  package: 'gvl_comments',
+                  height: 11,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Text(
+                'GVL Cloud',
+                style: baseStyle.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -503,8 +519,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
           Expanded(
             child: TextField(
               controller: _ctrl,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _sending ? null : _send(),
+              textInputAction: TextInputAction.newline,
               maxLines: null,
               minLines: 1,
               decoration: InputDecoration(
@@ -590,18 +605,75 @@ String _commentDisplayText(CommentModel comment, GvlCommentsL10n? l10n) {
   return comment.body;
 }
 
+List<InlineSpan> _buildLinkedSpans(
+  String text,
+  TextStyle? linkBaseStyle,
+) {
+  final spans = <InlineSpan>[];
+
+  if (text.isEmpty) {
+    return spans;
+  }
+
+  final regex = RegExp(
+    r'((https?:\/\/|www\.)[^\s]+|[\w\.\-]+@[\w\.\-]+\.\w+)',
+    caseSensitive: false,
+  );
+
+  int start = 0;
+
+  for (final match in regex.allMatches(text)) {
+    if (match.start > start) {
+      spans.add(TextSpan(text: text.substring(start, match.start)));
+    }
+
+    final raw = match.group(0)!;
+    spans.add(
+      TextSpan(
+        text: raw,
+        style: (linkBaseStyle ?? const TextStyle()).copyWith(
+          decoration: TextDecoration.underline,
+        ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () async {
+            String link = raw.trim();
+
+            if (!link.toLowerCase().startsWith('http')) {
+              if (link.contains('@')) {
+                link = 'mailto:$link';
+              } else {
+                link = 'https://$link';
+              }
+            }
+
+            final uri = Uri.tryParse(link);
+            if (uri != null && await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+      ),
+    );
+
+    start = match.end;
+  }
+
+  if (start < text.length) {
+    spans.add(TextSpan(text: text.substring(start)));
+  }
+
+  return spans;
+}
+
 /// Default comment item (bubble + optional avatar).
 class _DefaultCommentItem extends StatelessWidget {
   final CommentModel comment;
   final bool isMine;
-  final GvlCommentAlignment alignment;
   final AvatarBuilder? avatarBuilder;
 
   const _DefaultCommentItem({
     Key? key,
     required this.comment,
     required this.isMine,
-    required this.alignment,
     this.avatarBuilder,
   }) : super(key: key);
 
@@ -616,14 +688,32 @@ class _DefaultCommentItem extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final l10n = GvlCommentsL10n.of(context);
 
-    final bool alignRight = switch (alignment) {
-      GvlCommentAlignment.right => true,
-      GvlCommentAlignment.left => false,
-      GvlCommentAlignment.autoByUser => isMine,
-    };
+    final createdAt = comment.createdAt;
+    final relativeTime = formatRelativeTime(createdAt, context);
 
     final avatarSize = t.avatarSize ?? 32;
-    final avatar = avatarBuilder?.call(context, comment, avatarSize);
+    final showAvatars = t.showAvatars ?? true;
+
+    Widget? avatar;
+    if (showAvatars) {
+      if (avatarBuilder != null) {
+        avatar = avatarBuilder!(context, comment, avatarSize);
+      } else {
+        final name = comment.authorName ?? comment.externalUserId;
+        final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+        avatar = CircleAvatar(
+          radius: avatarSize / 2,
+          child: Text(
+            initial,
+            style: text.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              fontSize: avatarSize / 2,
+            ),
+          ),
+        );
+      }
+    }
 
     final bubble = Material(
       color: bg,
@@ -637,21 +727,41 @@ class _DefaultCommentItem extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.all((t.spacing ?? 8) + 4),
           child: Column(
-            crossAxisAlignment:
-                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 comment.authorName ?? comment.externalUserId,
                 style: t.authorStyle ??
                     text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
               ),
               const SizedBox(height: 4),
-              Text(
-                _commentDisplayText(comment, l10n),
-                style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                  fontStyle: comment.isVisibleNormally
-                      ? FontStyle.normal
-                      : FontStyle.italic,
+              RichText(
+                text: TextSpan(
+                  style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                    fontStyle: comment.isVisibleNormally
+                        ? FontStyle.normal
+                        : FontStyle.italic,
+                  ),
+                  children: _buildLinkedSpans(
+                    _commentDisplayText(comment, l10n),
+                    (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                      fontStyle: comment.isVisibleNormally
+                          ? FontStyle.normal
+                          : FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  relativeTime,
+                  style: (t.timestampStyle ?? text.bodySmall) ??
+                      const TextStyle(fontSize: 10),
                 ),
               ),
             ],
@@ -666,35 +776,26 @@ class _DefaultCommentItem extends StatelessWidget {
         horizontal: (t.spacing ?? 8),
       ),
       child: Align(
-        alignment:
-        alignRight ? Alignment.centerRight : Alignment.centerLeft,
+        alignment: Alignment.centerLeft,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!alignRight && avatar != null) ...[
-              SizedBox(
-                width: avatarSize,
-                height: avatarSize,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(avatarSize / 2),
-                  child: avatar,
+            if (avatar != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: SizedBox(
+                  width: avatarSize,
+                  height: avatarSize,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(avatarSize / 2),
+                    child: avatar,
+                  ),
                 ),
               ),
               SizedBox(width: t.spacing ?? 8),
             ],
-            bubble,
-            if (alignRight && avatar != null) ...[
-              SizedBox(width: t.spacing ?? 8),
-              SizedBox(
-                width: avatarSize,
-                height: avatarSize,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(avatarSize / 2),
-                  child: avatar,
-                ),
-              ),
-            ],
+            Flexible(child: bubble),
           ],
         ),
       ),
@@ -809,6 +910,9 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   /// Avatar size in logical pixels.
   final double? avatarSize;
 
+  /// Whether avatar circles should be displayed next to comments.
+  final bool? showAvatars;
+
   /// Corner radii applied to comment bubbles.
   final BorderRadius? bubbleRadius;
 
@@ -836,6 +940,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     this.buttonStyle,
     this.spacing,
     this.avatarSize,
+    this.showAvatars,
     this.bubbleRadius,
     this.composerShape,
     this.elevation,
@@ -867,6 +972,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       buttonStyle: tt.labelLarge,
       spacing: 8,
       avatarSize: 32,
+      showAvatars: true,
       bubbleRadius: const BorderRadius.all(Radius.circular(12)),
       composerShape: theme.inputDecorationTheme.border is OutlinedBorder
           ? theme.inputDecorationTheme.border as OutlinedBorder?
@@ -953,6 +1059,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       buttonStyle: other.buttonStyle ?? buttonStyle,
       spacing: other.spacing ?? spacing,
       avatarSize: other.avatarSize ?? avatarSize,
+      showAvatars: other.showAvatars ?? showAvatars,
       bubbleRadius: other.bubbleRadius ?? bubbleRadius,
       composerShape: other.composerShape ?? composerShape,
       elevation: other.elevation ?? elevation,
@@ -976,6 +1083,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     TextStyle? buttonStyle,
     double? spacing,
     double? avatarSize,
+    bool? showAvatars,
     BorderRadius? bubbleRadius,
     OutlinedBorder? composerShape,
     double? elevation,
@@ -995,6 +1103,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       buttonStyle: buttonStyle ?? this.buttonStyle,
       spacing: spacing ?? this.spacing,
       avatarSize: avatarSize ?? this.avatarSize,
+      showAvatars: showAvatars ?? this.showAvatars,
       bubbleRadius: bubbleRadius ?? this.bubbleRadius,
       composerShape: composerShape ?? this.composerShape,
       elevation: elevation ?? this.elevation,
@@ -1023,6 +1132,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       buttonStyle: TextStyle.lerp(buttonStyle, other.buttonStyle, t),
       spacing: lerpDoubleNullable(spacing, other.spacing, t),
       avatarSize: lerpDoubleNullable(avatarSize, other.avatarSize, t),
+      showAvatars: t < 0.5 ? showAvatars : other.showAvatars,
       bubbleRadius: BorderRadius.lerp(bubbleRadius, other.bubbleRadius, t),
       composerShape: t < 0.5 ? composerShape : other.composerShape,
       elevation: lerpDoubleNullable(elevation, other.elevation, t),

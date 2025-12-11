@@ -31,16 +31,10 @@ class DemoApp extends StatelessWidget {
                 'https://robohash.org/58266d40197a5e045353e8faad9368a9?set=set4&bgset=&size=400x400',
           ),
           theme: GvlCommentsTheme.of(context).copyWith(
-            avatarSize: 40.0,
+            avatarSize: 20.0,
             bubbleColor: Colors.blue.shade50,
+            showAvatars: false,
           ),
-          avatarBuilder: (context, comment, size) {
-            return CircleAvatar(
-              radius: size / 2,
-              backgroundImage:comment.avatarUrl != null ? NetworkImage(comment.avatarUrl!) : null,
-              backgroundColor: Colors.grey.shade300,
-            );
-          },
         ),
       ),
     );

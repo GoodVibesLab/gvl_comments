@@ -153,6 +153,54 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'Load previous comments'**
   String get loadPreviousCommentsLabel;
+
+  /// No description provided for @timeJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get timeJustNow;
+
+  /// No description provided for @timeOneMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'1 min ago'**
+  String get timeOneMinute;
+
+  /// No description provided for @timeXMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{m} min ago'**
+  String timeXMinutes(Object m);
+
+  /// No description provided for @timeOneHour.
+  ///
+  /// In en, this message translates to:
+  /// **'1 h ago'**
+  String get timeOneHour;
+
+  /// No description provided for @timeXHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{h} h ago'**
+  String timeXHours(Object h);
+
+  /// No description provided for @timeYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get timeYesterday;
+
+  /// No description provided for @timeXDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{d} days ago'**
+  String timeXDays(Object d);
+
+  /// No description provided for @timeFallbackDate.
+  ///
+  /// In en, this message translates to:
+  /// **'On {y}-{m}-{d}'**
+  String timeFallbackDate(Object d, Object m, Object y);
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {

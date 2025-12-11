@@ -9,5 +9,13 @@
   "alreadyReportedLabel": "You already reported this comment",
   "reportedPlaceholderLabel": "⚠ This comment has been reported",
   "moderatedPlaceholderLabel": "⚠ This comment has been moderated",
-  "loadPreviousCommentsLabel": "Load previous comments"
+  "loadPreviousCommentsLabel": "Load previous comments",
+  "timeJustNow": "Just now",
+  "timeOneMinute": "1 min ago",
+  "timeXMinutes": "{m} min ago",
+  "timeOneHour": "1 h ago",
+  "timeXHours": "{h} h ago",
+  "timeYesterday": "Yesterday",
+  "timeXDays": "{d} days ago",
+  "timeFallbackDate": "On {y}-{m}-{d}"
 }
