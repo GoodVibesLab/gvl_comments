@@ -17,6 +17,7 @@ class DemoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     return MaterialApp(
       title: 'GVL Comments Demo',
       localizationsDelegates: GvlCommentsL10n.localizationsDelegates,

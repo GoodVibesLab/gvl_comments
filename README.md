@@ -1,50 +1,41 @@
-# GoodVibesLab Comments Client (Flutter)
+# GVL Comments (Flutter)
 
-A production‑ready Flutter client for the **GoodVibesLab Comments SaaS** — offering fast, multi‑tenant comments with moderation, AI review, reporting, pagination and customizable UI.  
+A production‑ready Flutter comments UI for **GoodVibesLab Comments SaaS**.
 
-This package is used internally across all GVL apps and is now available with a **Free Tier** so developers can try the service without paying.  
-To use the SDK, users must create an account on the dashboard to obtain an API key.
+You initialize the SDK once with an **install key**, then drop a ready‑to‑use widget (`GvlCommentsList`) anywhere in your app. The widget handles pagination, optimistic posting, moderation-aware rendering, reporting and theming.
+
+To use the SDK, you must create an account on the dashboard to obtain an install key.
 
 ---
 
-## 🚀 Features
+## ✨ Features
 
-- ⚡ Ultra‑fast comment loading (Supabase + Edge)
+- ⚡ Fast comment loading (Supabase + Edge)
 - 🔐 Tenant‑isolated data with strict RLS
-- 🧪 AI moderation (optional)
-- 📣 User reporting + soft/hard hide thresholds
-- 🗂 Pagination with cursor-based loading
-- 🧵 Threaded comments, avatars, custom builders
-- 🛠 Server‑hydrated responses with avatars & profiles
-
----
-
-## 🆓 Free Tier
-
-A **100% Free Tier** is available so you can evaluate the service:
-
-- 1 project  
-- Limited monthly comment volume  
-- Full API access  
-- Dashboard & moderation tools  
-- Requires creating an account to obtain an API key
-
-Upgrade plans unlock higher volumes, auto‑moderation, analytics and priority performance.
-
-Create your free account at:
-
-**https://goodvibeslab.cloud**
+- 🧠 Moderation-aware UI (pending / moderated / reported)
+- 🤖 AI moderation (paid plans)
+- 📣 User reporting (when enabled by your plan/settings)
+- 🔁 Cursor-based pagination
+- 🧵 Threaded comments keyed by `threadKey`
+- 🎨 Customizable UI via builders + theme overrides
 
 ---
 
 ## 📦 Installation
 
-Add the package locally or via pub.dev:
+### From pub.dev
 
 ```yaml
 dependencies:
-  comments_client:
-    path: packages/comments_client
+  gvl_comments: ^<latest>
+```
+
+### Local path (monorepo)
+
+```yaml
+dependencies:
+  gvl_comments:
+    path: packages/gvl_comments
 ```
 
 Then:
@@ -55,96 +46,133 @@ flutter pub get
 
 ---
 
-## 🔧 Setup
+## 🚀 Quick start
 
-1. Create an account on the dashboard.
-2. Retrieve your **API key** (starts with `cmt_live_XXX`).
-3. Get your **Thread ID** (UUID) from the dashboard.
-4. Instantiate the client:
+1) Get your **install key** from the dashboard.
 
-```dart
-final client = CommentsClient(
-  baseUrl: 'https://your-deployment.vercel.app',
-  apiKey: 'cmt_live_xxx',
-  externalUser: CommentsExternalUser(
-    id: 'user-123',
-    name: 'Ada Lovelace',
-    avatarUrl: 'https://example.com/avatar.png',
-  ),
-);
-```
-
----
-
-## 💬 Listing Comments
+2) Initialize the SDK once at app startup:
 
 ```dart
-final comments = await client.listComments(
-  threadId: '4e9e9b31-bbe2-4e62-a836-8d361521b3a0',
-);
+import 'package:flutter/material.dart';
+import 'package:gvl_comments/gvl_comments.dart';
+import 'package:gvl_comments/l10n/gvl_comments_l10n.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await CommentsKit.initialize(
+    installKey: const String.fromEnvironment('GVL_INSTALL_KEY'),
+  );
+
+  runApp(const DemoApp());
+}
+
+class DemoApp extends StatelessWidget {
+  const DemoApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'GVL Comments Demo',
+      localizationsDelegates: GvlCommentsL10n.localizationsDelegates,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('GVL Comments Demo')),
+        body: GvlCommentsList(
+          threadKey: 'post:test',
+          newestAtBottom: false,
+          limit: 10,
+          user: UserProfile(
+            id: 'user_14',
+            name: 'Joris43',
+            avatarUrl:
+                'https://gravatar.com/avatar/e26490ee50f3b620ef39386cc893b12c?s=400&d=retro&r=pg',
+          ),
+
+          theme: GvlCommentsThemeData.bubble(context),
+        ),
+      ),
+    );
+  }
+}
 ```
+
+That’s it: you get a complete comments UI (list + composer) with pagination.
 
 ---
 
-## ✍️ Creating a Comment
+## 🧵 Thread keys
+
+Flutter uses `threadKey` (a string like `post:123`, `article:abc`, `video:xyz`).
+
+- A thread is created/resolved server-side by `threadKey`.
+- You do **not** need a UUID thread id in the Flutter widget.
+
+Choose a deterministic key from your domain model (post id, screen id, etc.).
+
+---
+
+## 👤 User profile
+
+`GvlCommentsList` requires a `UserProfile` so the SDK can:
+
+- identify the user server-side
+- attach author metadata to posted comments
+- apply moderation/reporting rules consistently
+
+At minimum you provide an `id`. `name` and `avatarUrl` are optional but strongly recommended.
+
+---
+
+## 🔁 Updating the current user
+
+If your user changes (login/logout, account switch), call `identify()` again.
 
 ```dart
-final created = await client.createComment(
-  threadId: '4e9e9b31-bbe2-4e62-a836-8d361521b3a0',
-  body: 'First! 🎉',
+final newUser = UserProfile(
+  id: 'user_99',
+  name: 'New Name',
+  avatarUrl: 'https://…',
 );
+
+await CommentsKit.instance.identify(newUser);
+```
+`CommentsKit.I()` is equivalent — `instance` is just a nicer alias.
+
+If you want to force a fresh auth token when switching users:
+
+```dart
+CommentsKit.instance.invalidateToken();
+await CommentsKit.instance.identify(newUser);
 ```
 
 ---
 
-## 🧵 About Thread Identifiers
+## 🎨 Customization
 
-The REST API **requires the internal UUID**, not the user‑friendly thread key.  
-You can retrieve it from:
+`GvlCommentsList` is ready-to-use, but exposes builder hooks for full control:
 
-- the dashboard, or  
-- the admin API if you manage threads programmatically.
+- `commentItemBuilder` — fully override comment row rendering
+- `avatarBuilder` — custom avatar widget
+- `sendButtonBuilder` — custom send button
+- `composerBuilder` — replace the whole composer
+- `separatorBuilder` — separators between items
 
-The client automatically injects:
+You can also override styling with:
 
-- `tenant_id`  
-- `external_user_id`  
-- `user profile fields`  
-
-No manual boilerplate needed.
-
----
-
-## 📄 Example
-
-See the full working example here:
-
-```
-example/lib/main.dart
-```
+- `theme: GvlCommentsThemeData...` (e.g. `GvlCommentsThemeData.bubble(context)`)
+- `GvlCommentsTheme` wrapper for local theme overrides
 
 ---
 
-## 🛠 Support & Production Use
+## 🛠 Support
 
-This SDK is ready for production.  
 For help, reach out at:
 
-**support@goodvibeslab.cloud**
+**contact@goodvibeslab.app**
 
 ---
 
 ## 📝 License
 
-Commercial license, included with all GoodVibesLab paid plans. A free tier is also available for testing.
-
----
-
-## 🗺️ Roadmap (non‑contractual)
-
-Planned upcoming enhancements include:
-
-- 📸 Image attachments (with storage, moderation & thumbnailing)
-- ❤️ Reactions on comments (like 👍 ❤️ 😂)
-
-These items are indicative only and may evolve based on customer demand.
+Proprietary / commercial license, included with all GoodVibesLab paid plans.
+A free tier may be available for evaluation.

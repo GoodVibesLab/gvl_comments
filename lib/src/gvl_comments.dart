@@ -20,6 +20,8 @@ class CommentsKit {
   /// initialization will throw a runtime error.
   static CommentsKit I() => _instance!;
 
+  static CommentsKit get instance => I();
+
   final CommentsConfig _config;
   final ApiClient _http;
   final TokenStore _tokens = TokenStore();
