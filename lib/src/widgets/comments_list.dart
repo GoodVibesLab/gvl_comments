@@ -45,11 +45,15 @@ class GvlCommentsList extends StatefulWidget {
   /// Optional local theme override for this widget.
   final GvlCommentsThemeData? theme;
 
+  /// Display order of comments.
+  /// - newestAtBottom = chat-like (default)
+  /// - newestAtTop = feed-like
+  final bool newestAtBottom;
+
   /// Creates a comments list bound to a thread and user profile.
   ///
   /// Provide builder callbacks to customize rendering; otherwise sensible
-  /// defaults are used. Set [alignment] to [GvlCommentAlignment.autoByUser] to
-  /// mirror chat-like alignment.
+  /// defaults are used.
   const GvlCommentsList({
     super.key,
     required this.threadKey,
@@ -63,6 +67,7 @@ class GvlCommentsList extends StatefulWidget {
     this.padding,
     this.scrollController,
     this.theme,
+    this.newestAtBottom = true,
   });
 
   @override
@@ -343,16 +348,16 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   Widget build(BuildContext context) {
     super.build(context);
 
-    final child = _buildContent(context);
-
     if (widget.theme != null) {
       return GvlCommentsTheme(
         data: widget.theme!,
-        child: child,
+        child: Builder(
+          builder: (ctx) => _buildContent(ctx),
+        ),
       );
     }
 
-    return child;
+    return _buildContent(context);
   }
 
   Widget _buildContent(BuildContext context) {
@@ -398,14 +403,14 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     final hasMoreRow = _hasMore && comments.isNotEmpty;
     final itemCount = comments.length + (hasMoreRow ? 1 : 0);
 
-    return Column(
-      children: [
-        Expanded(
-          child: ColoredBox(
-            color: t.gutterColor ?? Colors.transparent,
+    return ColoredBox(
+      color: t.backgroundColor ?? Colors.transparent,
+      child: Column(
+        children: [
+          Expanded(
             child: ListView.separated(
               controller: widget.scrollController,
-              reverse: true,
+              reverse: widget.newestAtBottom,
               padding: padding,
               itemCount: itemCount,
               separatorBuilder: (ctx, index) {
@@ -507,11 +512,10 @@ class _GvlCommentsListState extends State<GvlCommentsList>
               },
             ),
           ),
-        ),
-        if(CommentsKit.I().currentPlan != 'free')_buildBrandingFooter(context),
-        const Divider(height: 1),
-        _buildComposer(context, t, l10n),
-      ],
+          if (CommentsKit.I().currentPlan != 'free') _buildBrandingFooter(context),
+          _buildComposer(context, t, l10n),
+        ],
+      ),
     );
   }
 
@@ -529,8 +533,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       padding: EdgeInsets.only(
         left: t.spacing ?? 8,
         right: t.spacing ?? 8,
-        top: (t.spacing ?? 8) / 2,
-        bottom: (t.spacing ?? 8) / 2,
+        top: (t.spacing ?? 8) / 8,
+        bottom: 0,
       ),
       child: Align(
         alignment: Alignment.centerRight,
@@ -546,7 +550,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                 style: baseStyle.copyWith(color: color),
               ),
               Padding(
-                padding: const EdgeInsets.only(bottom: 3),
+                padding: const EdgeInsets.only(bottom: 2),
                 child: Image.asset(
                   'assets/gvl_cloud_logo.png',
                   package: 'gvl_comments',
@@ -589,44 +593,68 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       );
     }
 
-    final dense = Theme.of(context).visualDensity;
     return Padding(
-      padding: EdgeInsets.all(t.spacing ?? 8),
+      padding: EdgeInsets.fromLTRB(
+        t.spacing ?? 8,
+        (t.spacing ?? 8) / 2,
+        t.spacing ?? 8,
+        t.spacing ?? 8,
+      ),
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _ctrl,
-              textInputAction: TextInputAction.newline,
-              maxLines: null,
-              minLines: 1,
-              decoration: InputDecoration(
-                hintText: hint,
-                isDense: dense.vertical < 0,
-                border: t.composerShape == null
-                    ? const OutlineInputBorder()
-                    : InputBorder.none,
+            child: Material(
+              color: Theme.of(context).colorScheme.surface,
+              shape: t.composerShape ??
+                  const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                  ),
+              child: Container(
+                color: t.backgroundColor ?? Theme.of(context).colorScheme.surface,
+                padding: EdgeInsets.symmetric(
+                  horizontal: (t.spacing ?? 8),
+                  vertical: (t.spacing ?? 4),
+                ),
+                child: TextField(
+                  controller: _ctrl,
+                  textInputAction: TextInputAction.newline,
+                  maxLines: null,
+                  minLines: 1,
+
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    filled: true,
+                  ),
+                ),
               ),
             ),
           ),
-          SizedBox(width: t.spacing ?? 8),
+          SizedBox(width: (t.spacing ?? 8)/2),
           widget.sendButtonBuilder != null
               ? widget.sendButtonBuilder!(
             context,
             _sending ? () {} : _send,
             _sending,
           )
-              : IconButton.filled(
-            onPressed: _sending ? null : _send,
-            tooltip: l10n?.sendTooltip,
-            icon: _sending
-                ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-                : const Icon(Icons.send),
-          ),
+              : SizedBox(
+                  height: 40,
+                  width: 40,
+                  child: IconButton.filled(
+                    onPressed: _sending ? null : _send,
+                    tooltip: l10n?.sendTooltip,
+                    icon: _sending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                  ),
+                ),
         ],
       ),
     );
@@ -821,6 +849,7 @@ class _DefaultCommentItem extends StatelessWidget {
             padding: EdgeInsets.all((t.spacing ?? 8) + 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   comment.authorName ?? comment.externalUserId,
@@ -848,18 +877,7 @@ class _DefaultCommentItem extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    relativeTime,
-                    style: tsBase.copyWith(
-                      fontSize: (tsBase.fontSize ?? 11) - 1,
-                      color: tsColor,
-                      letterSpacing: (tsBase.letterSpacing ?? 0) + 0.1,
-                    ),
-                  ),
-                ),
+                // Removed timestamp from inside bubble
               ],
             ),
           ),
@@ -873,29 +891,46 @@ class _DefaultCommentItem extends StatelessWidget {
         vertical: baseSpacing + 2,
         horizontal: baseSpacing,
       ),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (avatar != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: SizedBox(
-                  width: avatarSize,
-                  height: avatarSize,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(avatarSize / 2),
-                    child: avatar,
-                  ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (avatar != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: SizedBox(
+                width: avatarSize,
+                height: avatarSize,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(avatarSize / 2),
+                  child: avatar,
                 ),
               ),
-              SizedBox(width: t.spacing ?? 8),
-            ],
-            Flexible(child: bubble),
+            ),
+            SizedBox(width: t.spacing ?? 8),
           ],
-        ),
+          // Make the bubble side flexible so it can shrink on narrow screens.
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                bubble,
+                const SizedBox(height: 3),
+                Padding(
+                  padding: EdgeInsets.only(left: baseSpacing),
+                  child: Text(
+                    relativeTime,
+                    style: tsBase.copyWith(
+                      fontSize: (tsBase.fontSize ?? 11) - 1,
+                      color: tsColor,
+                      letterSpacing: (tsBase.letterSpacing ?? 0) + 0.1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1002,7 +1037,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   final Color? bubbleAltColor;
 
   /// Color applied behind the list (gutter/background).
-  final Color? gutterColor;
+  final Color? backgroundColor;
 
   /// Color used for badges such as moderation markers.
   final Color? badgeColor;
@@ -1053,7 +1088,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   const GvlCommentsThemeData({
     this.bubbleColor,
     this.bubbleAltColor,
-    this.gutterColor,
+    this.backgroundColor,
     this.badgeColor,
     this.errorColor,
     this.authorStyle,
@@ -1081,28 +1116,32 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     final tt = theme.textTheme;
 
     return GvlCommentsThemeData(
+      // Keep defaults conservative, but not “invisible”.
       bubbleColor: cs.surfaceContainerHighest,
       bubbleAltColor: cs.surfaceContainer,
-      gutterColor: cs.surface,
+      // IMPORTANT: default background should be transparent so the host app can
+      // control the surrounding surface without fighting the widget.
+      backgroundColor: Colors.transparent,
       badgeColor: cs.secondaryContainer,
       errorColor: cs.error,
       authorStyle: tt.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       bodyStyle: tt.bodyMedium,
-      timestampStyle:
-      tt.bodySmall?.copyWith(color: cs.onSurface.withAlpha(0x99)),
+      timestampStyle: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
       errorStyle: tt.bodyMedium?.copyWith(color: cs.error),
       hintStyle: theme.inputDecorationTheme.hintStyle ??
           tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
       buttonStyle: tt.labelLarge,
+      // More usable baseline spacing.
       spacing: 8,
       avatarSize: 32,
       showAvatars: true,
       bubbleRadius: const BorderRadius.all(Radius.circular(12)),
+      // Use the host app’s input decoration border when possible.
       composerShape: theme.inputDecorationTheme.border is OutlinedBorder
           ? theme.inputDecorationTheme.border as OutlinedBorder?
           : const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(10)),
-      ),
+              borderRadius: BorderRadius.all(Radius.circular(999)),
+            ),
       elevation: 0,
       composerMaxLines: 6,
     );
@@ -1111,58 +1150,105 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   /// Neutral preset with minimal decoration suitable for dense layouts.
   factory GvlCommentsThemeData.neutral(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // Neutral: subtle, low contrast, clean.
     return base.copyWith(
-      spacing: (base.spacing ?? 8),
-      avatarSize: base.avatarSize ?? 32,
+      bubbleColor: cs.surfaceContainerHighest,
+      bubbleAltColor: cs.surfaceContainer,
       elevation: 0,
+      bubbleRadius: const BorderRadius.all(Radius.circular(12)),
+      spacing: 8,
+      avatarSize: 30,
+      showAvatars: true,
     );
   }
 
   /// Compact preset that reduces spacing and typography sizes.
   factory GvlCommentsThemeData.compact(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // Compact: denser layout + smaller type. Designed for dashboards/admin.
+    final body = base.bodyStyle ?? theme.textTheme.bodyMedium;
+    final author = base.authorStyle ?? theme.textTheme.titleSmall;
+    final ts = base.timestampStyle ?? theme.textTheme.bodySmall;
+
     return base.copyWith(
-      spacing: (base.spacing ?? 8) * 0.6,
-      avatarSize: (base.avatarSize ?? 32) * 0.8,
-      bodyStyle: base.bodyStyle?.copyWith(
-        fontSize: (base.bodyStyle?.fontSize ?? 14) - 1,
-      ),
-      authorStyle: base.authorStyle?.copyWith(
-        fontSize: (base.authorStyle?.fontSize ?? 13) - 1,
-      ),
+      spacing: 6,
+      avatarSize: 24,
       bubbleRadius: const BorderRadius.all(Radius.circular(10)),
       elevation: 0,
+      bubbleColor: cs.surfaceContainerHighest,
+      bubbleAltColor: cs.surfaceContainer,
+      authorStyle: author?.copyWith(
+        fontSize: (author.fontSize ?? 13) - 1,
+        letterSpacing: 0.2,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyStyle: body?.copyWith(
+        fontSize: (body.fontSize ?? 14) - 1,
+        height: 1.15,
+      ),
+      timestampStyle: ts?.copyWith(
+        fontSize: (ts.fontSize ?? 12) - 1,
+        color: cs.onSurfaceVariant.withOpacity(0.85),
+      ),
     );
   }
 
   /// Card-like preset with subtle elevation and equal bubble colors.
   factory GvlCommentsThemeData.card(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // Card: clear separation from background (great on feeds).
+    // Use surface for bubbles with elevation so it reads like “cards”.
     return base.copyWith(
       bubbleColor: cs.surface,
       bubbleAltColor: cs.surface,
-      gutterColor: cs.surface,
-      elevation: 1.5,
-      spacing: (base.spacing ?? 8) + 2,
-      bubbleRadius: const BorderRadius.all(Radius.circular(14)),
+      elevation: 2,
+      bubbleRadius: const BorderRadius.all(Radius.circular(16)),
+      spacing: 10,
+      avatarSize: 32,
+      showAvatars: true,
     );
   }
 
   /// Playful preset with rounded “bubble” styling.
   factory GvlCommentsThemeData.bubble(BuildContext context) {
     final base = GvlCommentsThemeData.defaults(context);
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // Bubble: playful + clearly differentiated mine vs others.
+    // We keep opacity to avoid neon-looking UIs in some schemes.
+    final mine = cs.primaryContainer.withOpacity(0.92);
+    final other = cs.secondaryContainer.withOpacity(0.70);
+
     return base.copyWith(
-      bubbleColor: cs.primaryContainer.withAlpha(220),
-      bubbleAltColor: cs.surfaceContainer,
-      authorStyle: base.authorStyle?.copyWith(
+      bubbleColor: mine,
+      bubbleAltColor: other,
+      elevation: 0,
+      bubbleRadius: const BorderRadius.all(Radius.circular(20)),
+      spacing: 10,
+      avatarSize: 28,
+      showAvatars: true,
+      authorStyle: (base.authorStyle ?? theme.textTheme.titleSmall)?.copyWith(
         color: cs.onPrimaryContainer,
         fontWeight: FontWeight.w700,
       ),
-      bodyStyle: base.bodyStyle?.copyWith(color: cs.onPrimaryContainer),
-      bubbleRadius: const BorderRadius.all(Radius.circular(18)),
-      spacing: (base.spacing ?? 8) + 2,
+      bodyStyle: (base.bodyStyle ?? theme.textTheme.bodyMedium)?.copyWith(
+        color: cs.onPrimaryContainer,
+        height: 1.25,
+      ),
+      timestampStyle:
+          (base.timestampStyle ?? theme.textTheme.bodySmall)?.copyWith(
+        color: cs.onSurfaceVariant.withOpacity(0.85),
+      ),
     );
   }
 
@@ -1172,7 +1258,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     return GvlCommentsThemeData(
       bubbleColor: other.bubbleColor ?? bubbleColor,
       bubbleAltColor: other.bubbleAltColor ?? bubbleAltColor,
-      gutterColor: other.gutterColor ?? gutterColor,
+      backgroundColor: other.backgroundColor ?? backgroundColor,
       badgeColor: other.badgeColor ?? badgeColor,
       errorColor: other.errorColor ?? errorColor,
       authorStyle: other.authorStyle ?? authorStyle,
@@ -1196,7 +1282,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   GvlCommentsThemeData copyWith({
     Color? bubbleColor,
     Color? bubbleAltColor,
-    Color? gutterColor,
+    Color? backgroundColor,
     Color? badgeColor,
     Color? errorColor,
     TextStyle? authorStyle,
@@ -1216,7 +1302,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     return GvlCommentsThemeData(
       bubbleColor: bubbleColor ?? this.bubbleColor,
       bubbleAltColor: bubbleAltColor ?? this.bubbleAltColor,
-      gutterColor: gutterColor ?? this.gutterColor,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
       badgeColor: badgeColor ?? this.badgeColor,
       errorColor: errorColor ?? this.errorColor,
       authorStyle: authorStyle ?? this.authorStyle,
@@ -1245,7 +1331,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
     return GvlCommentsThemeData(
       bubbleColor: Color.lerp(bubbleColor, other.bubbleColor, t),
       bubbleAltColor: Color.lerp(bubbleAltColor, other.bubbleAltColor, t),
-      gutterColor: Color.lerp(gutterColor, other.gutterColor, t),
+      backgroundColor: Color.lerp(backgroundColor, other.backgroundColor, t),
       badgeColor: Color.lerp(badgeColor, other.badgeColor, t),
       errorColor: Color.lerp(errorColor, other.errorColor, t),
       authorStyle: TextStyle.lerp(authorStyle, other.authorStyle, t),
@@ -1354,11 +1440,3 @@ class GvlCommentsStrings {
     );
   }
 }
-
-/// Bubble alignment.
-///
-/// * [left] renders every comment starting from the left edge.
-/// * [right] aligns all comments to the right edge.
-/// * [autoByUser] aligns comments by author: current user on the right,
-///   others on the left.
-enum GvlCommentAlignment { left, right, autoByUser }

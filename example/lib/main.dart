@@ -24,16 +24,16 @@ class DemoApp extends StatelessWidget {
         appBar: AppBar(title: const Text('GVL Comments Demo')),
         body: GvlCommentsList(
           threadKey: 'post:test',
+          newestAtBottom: false,
+          limit: 10,
           user: UserProfile(
             id: 'user_14',
             name: 'Joris43',
             avatarUrl:
-                'https://robohash.org/58266d40197a5e045353e8faad9368a9?set=set4&bgset=&size=400x400',
+                'https://gravatar.com/avatar/e26490ee50f3b620ef39386cc893b12c?s=400&d=retro&r=pg',
           ),
-          theme: GvlCommentsTheme.of(context).copyWith(
-            avatarSize: 20.0,
-            bubbleColor: Colors.blue.shade50,
-          ),
+
+          theme: GvlCommentsThemeData.bubble(context),
         ),
       ),
     );

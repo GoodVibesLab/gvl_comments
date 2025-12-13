@@ -50,11 +50,11 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
   }
 
   @override
-  String get timeOneHour => '1 h ago';
+  String get timeOneHour => '1h ago';
 
   @override
   String timeXHours(Object h) {
-    return '$h h ago';
+    return '${h}h ago';
   }
 
   @override

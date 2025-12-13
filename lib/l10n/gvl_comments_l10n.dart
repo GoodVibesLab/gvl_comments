@@ -175,13 +175,13 @@ abstract class GvlCommentsL10n {
   /// No description provided for @timeOneHour.
   ///
   /// In en, this message translates to:
-  /// **'1 h ago'**
+  /// **'1h ago'**
   String get timeOneHour;
 
   /// No description provided for @timeXHours.
   ///
   /// In en, this message translates to:
-  /// **'{h} h ago'**
+  /// **'{h}h ago'**
   String timeXHours(Object h);
 
   /// No description provided for @timeYesterday.

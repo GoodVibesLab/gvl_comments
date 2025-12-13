@@ -131,27 +131,30 @@ class CommentsKit {
         required UserProfile user,
         int limit = 50,
         String? before,
-  }) async {
-    final bearer = await _getBearer(user: user);
-    debugPrint('gvl_comments: apiBase=${_config.apiBase}');
+      }) async {
+    try {
+      final bearer = await _getBearer(user: user);
 
-    final params = <String, String>{
-      'thread': threadKey,
-      'limit': '$limit',
-      if (before != null) 'before': before,
-    };
-    final query = Uri(queryParameters: params).query;
+      final thread = Uri.encodeQueryComponent(threadKey);
+      final beforePart = (before != null) ? '&before=$before' : '';
+      final url = _config.apiBase
+          .resolve('comments?thread=$thread&limit=$limit$beforePart');
 
-    final url = _config.apiBase.resolve('comments?$query');
-    debugPrint('gvl_comments: listByThreadKey → $url');
+      debugPrint('gvl_comments: listByThreadKey → $url');
 
-    final list = await _http.getList(
-      url,
-      headers: {'Authorization': 'Bearer $bearer'},
-    );
-    return list
-        .map((e) => CommentModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+      final list = await _http.getList(
+        url,
+        headers: {'Authorization': 'Bearer $bearer'},
+      );
+
+      return list
+          .map((e) => CommentModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e, stack) {
+      debugPrint('gvl_comments: listByThreadKey error: $e');
+      debugPrintStack(stackTrace: stack);
+      throw StateError('Failed to load comments: $e');
+    }
   }
 
   /// Posts a new comment in the specified thread.
