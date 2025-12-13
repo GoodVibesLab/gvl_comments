@@ -127,18 +127,24 @@ class CommentsKit {
   /// chronological order. [limit] controls the maximum number of comments to
   /// retrieve per call. Throws when network calls fail.
   Future<List<CommentModel>> listByThreadKey(
-      String threadKey, {
-        required UserProfile user,
-        int limit = 50,
-        String? before,
-      }) async {
+    String threadKey, {
+    required UserProfile user,
+    int limit = 50,
+    String? before,
+  }) async {
     try {
       final bearer = await _getBearer(user: user);
 
-      final thread = Uri.encodeQueryComponent(threadKey);
-      final beforePart = (before != null) ? '&before=$before' : '';
+      // Build a safe URL using queryParameters (no manual encoding, avoids double-encoding bugs).
+      final params = <String, String>{
+        'thread': threadKey,
+        'limit': '$limit',
+        if (before != null) 'before': before,
+      };
+
       final url = _config.apiBase
-          .resolve('comments?thread=$thread&limit=$limit$beforePart');
+          .resolve('comments')
+          .replace(queryParameters: params);
 
       debugPrint('gvl_comments: listByThreadKey → $url');
 
