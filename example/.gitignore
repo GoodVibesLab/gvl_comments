@@ -33,6 +33,23 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Example app generated files
+example/.dart_tool/
+example/build/
+example/.idea/
+example/*.iml
+example/flutter_*.log
+example/.flutter-plugins-dependencies
+
+# iOS example
+example/ios/Flutter/ephemeral/
+example/ios/Pods/
+example/ios/.symlinks/
+example/ios/Runner.xcworkspace/
+
+# Android example
+example/android/local.properties
+
 # Symbolication related
 app.*.symbols
 

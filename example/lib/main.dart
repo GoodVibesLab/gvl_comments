@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:gvl_comments/gvl_comments.dart';
 import 'package:gvl_comments/l10n/gvl_comments_l10n.dart';
 
+const installKey = String.fromEnvironment('GVL_INSTALL_KEY');
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  assert(
+    installKey.isNotEmpty,
+    'GVL_INSTALL_KEY is missing. Run the example with:\n'
+    'flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
+  );
+
   await CommentsKit.initialize(
-    installKey: const String.fromEnvironment('GVL_INSTALL_KEY'),
+    installKey: installKey,
   );
 
   runApp(const DemoApp());
@@ -17,23 +25,21 @@ class DemoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return MaterialApp(
       title: 'GVL Comments Demo',
       localizationsDelegates: GvlCommentsL10n.localizationsDelegates,
+      supportedLocales: GvlCommentsL10n.supportedLocales,
       home: Scaffold(
         appBar: AppBar(title: const Text('GVL Comments Demo')),
         body: GvlCommentsList(
-          threadKey: 'post:test',
+          threadKey: 'post:example',
           newestAtBottom: false,
           limit: 10,
           user: UserProfile(
-            id: 'user_14',
-            name: 'Joris43',
-            avatarUrl:
-                'https://gravatar.com/avatar/e26490ee50f3b620ef39386cc893b12c?s=400&d=retro&r=pg',
+            id: 'user_1',
+            name: 'Demo User',
+            avatarUrl: 'https://api.dicebear.com/7.x/identicon/png?seed=demo',
           ),
-
           theme: GvlCommentsThemeData.bubble(context),
         ),
       ),
