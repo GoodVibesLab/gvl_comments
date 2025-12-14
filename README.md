@@ -6,6 +6,8 @@ You initialize the SDK once with an **install key**, then drop a ready‑to‑us
 
 To use the SDK, you must create an account on the dashboard to obtain an install key.
 
+Create your account at https://goodvibeslab.cloud to get your install key.
+
 ---
 
 ## ✨ Features
@@ -50,6 +52,10 @@ flutter pub get
 
 1) Get your **install key** from the dashboard.
 
+```
+flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"
+```
+
 2) Initialize the SDK once at app startup:
 
 ```dart
@@ -60,9 +66,15 @@ import 'package:gvl_comments/l10n/gvl_comments_l10n.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await CommentsKit.initialize(
-    installKey: const String.fromEnvironment('GVL_INSTALL_KEY'),
+  const installKey = String.fromEnvironment('GVL_INSTALL_KEY');
+
+  assert(
+    installKey.isNotEmpty,
+    'GVL_INSTALL_KEY is missing. Run:\n'
+    'flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
   );
+
+  await CommentsKit.initialize(installKey: installKey);
 
   runApp(const DemoApp());
 }
