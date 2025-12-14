@@ -78,14 +78,14 @@ class DemoApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(title: const Text('GVL Comments Demo')),
         body: GvlCommentsList(
-          threadKey: 'post:test',
+          threadKey: 'your_post_id_or_other_unique_key',
           newestAtBottom: false,
           limit: 10,
           user: UserProfile(
-            id: 'user_14',
-            name: 'Joris43',
+            id: 'user_id_string',
+            name: 'John Doe',
             avatarUrl:
-                'https://gravatar.com/avatar/e26490ee50f3b620ef39386cc893b12c?s=400&d=retro&r=pg',
+                'https://example.com/path/to/avatar.jpg',
           ),
 
           theme: GvlCommentsThemeData.bubble(context),
