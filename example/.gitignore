@@ -34,21 +34,21 @@ migrate_working_dir/
 /coverage/
 
 # Example app generated files
-example/.dart_tool/
-example/build/
-example/.idea/
+android/app/src/main/kotlin/com/goodvibeslab/comments/.dart_tool/
+android/app/src/main/kotlin/com/goodvibeslab/comments/build/
+android/app/src/main/kotlin/com/goodvibeslab/comments/.idea/
 example/*.iml
-example/flutter_*.log
-example/.flutter-plugins-dependencies
+android/app/src/main/kotlin/com/goodvibeslab/comments/flutter_*.log
+android/app/src/main/kotlin/com/goodvibeslab/comments/.flutter-plugins-dependencies
 
 # iOS example
-example/ios/Flutter/ephemeral/
-example/ios/Pods/
-example/ios/.symlinks/
-example/ios/Runner.xcworkspace/
+android/app/src/main/kotlin/com/goodvibeslab/comments/ios/Flutter/ephemeral/
+android/app/src/main/kotlin/com/goodvibeslab/comments/ios/Pods/
+android/app/src/main/kotlin/com/goodvibeslab/comments/ios/.symlinks/
+android/app/src/main/kotlin/com/goodvibeslab/comments/ios/Runner.xcworkspace/
 
 # Android example
-example/android/local.properties
+android/app/src/main/kotlin/com/goodvibeslab/comments/android/local.properties
 
 # Symbolication related
 app.*.symbols

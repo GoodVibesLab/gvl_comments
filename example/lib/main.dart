@@ -2,20 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:gvl_comments/gvl_comments.dart';
 import 'package:gvl_comments/l10n/gvl_comments_l10n.dart';
 
-const installKey = String.fromEnvironment('GVL_INSTALL_KEY');
+const _envInstallKey = String.fromEnvironment('GVL_INSTALL_KEY');
+
+// Public demo key for the example app only (bound to example package/bundle).
+const _demoInstallKey = 'cmt_live_cEt4OEJhkQFRAdsUx-exaGYbx88Fd35t4omBg_Tjq3I';
+
+String get _installKey => _envInstallKey.isNotEmpty ? _envInstallKey : _demoInstallKey;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   assert(
-    installKey.isNotEmpty,
-    'GVL_INSTALL_KEY is missing. Run the example with:\n'
-    'flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
+  _installKey.isNotEmpty,
+  'GVL_INSTALL_KEY is missing. Run:\n'
+      'flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
   );
 
-  await CommentsKit.initialize(
-    installKey: installKey,
-  );
+  await CommentsKit.initialize(installKey: _installKey);
 
   runApp(const DemoApp());
 }
