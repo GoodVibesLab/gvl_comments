@@ -2,6 +2,11 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 0.9.1
+- Initial public release on pub.dev
+- Added install key initialization + platform binding headers
+- Included example app (Android + iOS)
+
 ## 0.9.0 — 2025-12-09
 
 ### 🚀 Initial Production Release  

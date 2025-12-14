@@ -512,7 +512,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
               },
             ),
           ),
-          if (CommentsKit.I().currentPlan != 'free') _buildBrandingFooter(context),
+          if (CommentsKit.I().currentPlan == 'free') _buildBrandingFooter(context),
           _buildComposer(context, t, l10n),
         ],
       ),

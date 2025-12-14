@@ -5,7 +5,7 @@ import 'package:gvl_comments/l10n/gvl_comments_l10n.dart';
 const _envInstallKey = String.fromEnvironment('GVL_INSTALL_KEY');
 
 // Public demo key for the example app only (bound to example package/bundle).
-const _demoInstallKey = 'cmt_live_cEt4OEJhkQFRAdsUx-exaGYbx88Fd35t4omBg_Tjq3I';
+const _demoInstallKey = 'cmt_live_EyuFlFVL682oiBVMealY2TfykRvJSDlF4Hbb8G2inhw';
 
 String get _installKey => _envInstallKey.isNotEmpty ? _envInstallKey : _demoInstallKey;
 
