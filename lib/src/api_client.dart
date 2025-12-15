@@ -41,7 +41,6 @@ class ApiClient {
       Uri url, {
         Map<String, String>? headers,
       }) async {
-    log(headers?['Authorization'] ?? 'no auth');
     final res = await _http.get(url, headers: headers);
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
