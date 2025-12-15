@@ -33,9 +33,9 @@ String formatRelativeTime(DateTime createdAt, BuildContext context) {
 
   // fallback date
   return l10n?.timeFallbackDate(
-    ts.year.toString().padLeft(4, '0'),
-    ts.month.toString().padLeft(2, '0'),
-    ts.day.toString().padLeft(2, '0'),
-  ) ??
+        ts.year.toString().padLeft(4, '0'),
+        ts.month.toString().padLeft(2, '0'),
+        ts.day.toString().padLeft(2, '0'),
+      ) ??
       '${ts.year}-${ts.month}-${ts.day}';
 }

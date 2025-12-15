@@ -166,9 +166,9 @@ class ModerationSettings {
     return ModerationSettings(
       userReportsEnabled: json['userReportsEnabled'] as bool? ?? true,
       softHideAfterReports:
-      (json['softHideAfterReports'] as num?)?.toInt() ?? 3,
+          (json['softHideAfterReports'] as num?)?.toInt() ?? 3,
       hardHideAfterReports:
-      (json['hardHideAfterReports'] as num?)?.toInt() ?? 10,
+          (json['hardHideAfterReports'] as num?)?.toInt() ?? 10,
       aiMode: json['aiMode'] as String? ?? 'none',
       aiAutoFlag: json['aiAutoFlag'] as bool? ?? true,
       aiSensitivity: (json['aiSensitivity'] as num?)?.toDouble() ?? 0.5,

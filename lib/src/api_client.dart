@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer';
 import 'package:http/http.dart' as http;
 
 /// Minimal HTTP helper for the Comments SDK.
@@ -8,10 +7,10 @@ class ApiClient {
   ApiClient({http.Client? httpClient}) : _http = httpClient ?? http.Client();
 
   Future<Map<String, dynamic>> postJson(
-      Uri url,
-      Map<String, dynamic> body, {
-        Map<String, String>? headers,
-      }) async {
+    Uri url,
+    Map<String, dynamic> body, {
+    Map<String, String>? headers,
+  }) async {
     final res = await _http.post(
       url,
       headers: {'Content-Type': 'application/json', ...?headers},
@@ -38,9 +37,9 @@ class ApiClient {
   }
 
   Future<List<Map<String, dynamic>>> getList(
-      Uri url, {
-        Map<String, String>? headers,
-      }) async {
+    Uri url, {
+    Map<String, String>? headers,
+  }) async {
     final res = await _http.get(url, headers: headers);
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -49,8 +48,7 @@ class ApiClient {
       if (decoded is List) {
         return decoded
             .whereType<Map>() // filtre au cas où
-            .map<Map<String, dynamic>>(
-                (m) => Map<String, dynamic>.from(m))
+            .map<Map<String, dynamic>>((m) => Map<String, dynamic>.from(m))
             .toList();
       }
       throw StateError('Expected a JSON array, got: ${res.body}');
@@ -59,9 +57,9 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getJson(
-      Uri url, {
-        Map<String, String>? headers,
-      }) async {
+    Uri url, {
+    Map<String, String>? headers,
+  }) async {
     final res = await _http.get(url, headers: headers);
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return {};

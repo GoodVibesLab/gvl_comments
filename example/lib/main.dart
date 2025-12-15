@@ -7,15 +7,16 @@ const _envInstallKey = String.fromEnvironment('GVL_INSTALL_KEY');
 // Public demo key for the example app only (bound to example package/bundle).
 const _demoInstallKey = 'cmt_live_EyuFlFVL682oiBVMealY2TfykRvJSDlF4Hbb8G2inhw';
 
-String get _installKey => _envInstallKey.isNotEmpty ? _envInstallKey : _demoInstallKey;
+String get _installKey =>
+    _envInstallKey.isNotEmpty ? _envInstallKey : _demoInstallKey;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   assert(
-  _installKey.isNotEmpty,
-  'GVL_INSTALL_KEY is missing. Run:\n'
-      'flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
+    _installKey.isNotEmpty,
+    'GVL_INSTALL_KEY is missing. Run:\n'
+    'flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
   );
 
   await CommentsKit.initialize(installKey: _installKey);

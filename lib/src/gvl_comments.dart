@@ -139,18 +139,15 @@ class CommentsKit {
         if (before != null) 'before': before,
       };
 
-      final url = _config.apiBase
-          .resolve('comments')
-          .replace(queryParameters: params);
+      final url =
+          _config.apiBase.resolve('comments').replace(queryParameters: params);
 
       final list = await _http.getList(
         url,
         headers: {'Authorization': 'Bearer $bearer'},
       );
 
-      return list
-          .map((e) => CommentModel.fromJson(e))
-          .toList();
+      return list.map((e) => CommentModel.fromJson(e)).toList();
     } catch (e, stack) {
       debugPrintStack(stackTrace: stack);
       throw StateError('Failed to load comments: $e');

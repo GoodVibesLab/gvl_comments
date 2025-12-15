@@ -161,13 +161,15 @@ class CommentsApiException implements Exception {
 }
 
 class _AuthToken {
-  _AuthToken({required this.token, required this.expiresAt, required this.tenantId});
+  _AuthToken(
+      {required this.token, required this.expiresAt, required this.tenantId});
 
   final String token;
   final DateTime expiresAt;
   final String tenantId;
 
-  bool get isExpired => DateTime.now().isAfter(expiresAt.subtract(const Duration(minutes: 2)));
+  bool get isExpired =>
+      DateTime.now().isAfter(expiresAt.subtract(const Duration(minutes: 2)));
 }
 
 /// High level client that wraps the HTTP API exposed by the Comments backend.
@@ -210,7 +212,8 @@ class CommentsClient {
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final normalizedBase = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
-    final uri = Uri.parse(normalizedBase).resolve(path.startsWith('/') ? path.substring(1) : path);
+    final uri = Uri.parse(normalizedBase)
+        .resolve(path.startsWith('/') ? path.substring(1) : path);
     return query == null ? uri : uri.replace(queryParameters: query);
   }
 
@@ -244,11 +247,14 @@ class CommentsClient {
     final tenantId = payload['tenant_id'] as String?;
 
     if (tokenValue == null || tenantId == null) {
-      throw CommentsApiException(response.statusCode, 'invalid_token_response', details: payload);
+      throw CommentsApiException(response.statusCode, 'invalid_token_response',
+          details: payload);
     }
 
     final cached = _AuthToken(
-      token: tokenType.toLowerCase() == 'bearer' ? 'Bearer $tokenValue' : tokenValue,
+      token: tokenType.toLowerCase() == 'bearer'
+          ? 'Bearer $tokenValue'
+          : tokenValue,
       expiresAt: expiresAt,
       tenantId: tenantId,
     );
@@ -340,14 +346,17 @@ class CommentsClient {
 
     final payload = jsonDecode(response.body);
 
-    if (payload is List && payload.isNotEmpty && payload.first is Map<String, dynamic>) {
+    if (payload is List &&
+        payload.isNotEmpty &&
+        payload.first is Map<String, dynamic>) {
       return Comment.fromJson(payload.first as Map<String, dynamic>);
     }
     if (payload is Map<String, dynamic>) {
       return Comment.fromJson(payload);
     }
 
-    throw CommentsApiException(response.statusCode, 'unexpected_response', details: payload);
+    throw CommentsApiException(response.statusCode, 'unexpected_response',
+        details: payload);
   }
 
   /// Manually refreshes the cached token.
