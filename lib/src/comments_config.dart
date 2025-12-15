@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -36,8 +36,6 @@ class CommentsConfig {
         defaultValue: 'https://api.goodvibeslab.cloud/comments/v1/',
       ),
     );
-
-    debugPrint('CommentsConfig.detect: apiBase=$apiBase');
 
     String platform;
     if (kIsWeb) {

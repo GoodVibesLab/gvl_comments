@@ -85,9 +85,6 @@ class CommentsKit {
       headers: headers,
     );
 
-    //TODO remove debugPrint
-    debugPrint('gvl_comments: obtained new token: $json');
-
     final token = json['access_token'] as String;
     final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
     final plan = json['plan'] as String?;
@@ -113,8 +110,6 @@ class CommentsKit {
       _config.apiBase.resolve('comments/settings'),
       headers: {'Authorization': 'Bearer $bearer'},
     );
-
-    debugPrint('gvl_comments: moderation settings: $json');
 
     final settings = ModerationSettings.fromJson(json);
     _cachedSettings = settings;
@@ -148,18 +143,15 @@ class CommentsKit {
           .resolve('comments')
           .replace(queryParameters: params);
 
-      debugPrint('gvl_comments: listByThreadKey → $url');
-
       final list = await _http.getList(
         url,
         headers: {'Authorization': 'Bearer $bearer'},
       );
 
       return list
-          .map((e) => CommentModel.fromJson(e as Map<String, dynamic>))
+          .map((e) => CommentModel.fromJson(e))
           .toList();
     } catch (e, stack) {
-      debugPrint('gvl_comments: listByThreadKey error: $e');
       debugPrintStack(stackTrace: stack);
       throw StateError('Failed to load comments: $e');
     }
@@ -185,7 +177,7 @@ class CommentsKit {
       },
       headers: {'Authorization': 'Bearer $bearer'},
     );
-    return CommentModel.fromJson(json as Map<String, dynamic>);
+    return CommentModel.fromJson(json);
   }
 
   /// Reports a comment.
@@ -232,7 +224,7 @@ class CommentsKit {
         },
       );
     } catch (e) {
-      debugPrint('gvl_comments: error during identify(): $e');
+      throw StateError('Failed to identify user: $e');
     }
   }
 }

@@ -1,5 +1,5 @@
 /// Public entrypoint for the GoodVibesLab comments Flutter SDK.
-library gvl_comments;
+library;
 
 export 'src/gvl_comments.dart';
 export 'src/models.dart';

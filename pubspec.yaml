@@ -1,6 +1,6 @@
 name: gvl_comments
 description: Production-ready comments UI for Flutter apps, powered by GoodVibesLab Comments Cloud.
-version: 0.9.1
+version: 0.9.2
 homepage: https://goodvibeslab.cloud
 repository: https://github.com/GoodVibesLab/gvl_comments
 issue_tracker: https://github.com/GoodVibesLab/gvl_comments/issues
@@ -20,6 +20,7 @@ dependencies:
   intl: ^0.20.2
 
 dev_dependencies:
+  flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
 

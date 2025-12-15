@@ -1,4 +1,4 @@
-library comments_client;
+library;
 
 import 'dart:convert';
 

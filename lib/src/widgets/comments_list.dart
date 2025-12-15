@@ -135,8 +135,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
 
     // Fetch moderation settings (best-effort).
     try {
-      final settings =
-      await kit.getModerationSettings(user: widget.user);
+      final settings = await kit.getModerationSettings(user: widget.user);
       if (mounted) {
         setState(() {
           _userReportsEnabled = settings.userReportsEnabled;
@@ -163,13 +162,6 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         limit: widget.limit,
         before: null,
       );
-
-      debugPrint(
-          'gvl_comments: loaded ${list.length} comments for thread ${widget.threadKey}');
-      for (final c in list) {
-        debugPrint(
-            ' - [${c.id}] ${c.authorName ?? c.externalUserId}: ${c.body}, avatar=${c.avatarUrl}');
-      }
 
       setState(() {
         _comments = list;
@@ -205,9 +197,6 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         limit: widget.limit,
         before: _beforeCursor,
       );
-
-      debugPrint(
-          'gvl_comments: loaded MORE ${list.length} comments for thread ${widget.threadKey}');
 
       setState(() {
         final current = _comments ?? <CommentModel>[];
@@ -309,14 +298,14 @@ class _GvlCommentsListState extends State<GvlCommentsList>
           SnackBar(
             content: Text(
               isDuplicate
-                  ? (l10n?.alreadyReportedLabel ?? 'You already reported this comment')
+                  ? (l10n?.alreadyReportedLabel ??
+                      'You already reported this comment')
                   : (l10n?.reportSentLabel ?? 'Comment reported'),
             ),
           ),
         );
       }
     } catch (e) {
-      debugPrint('gvl_comments: error while reporting comment ${comment.id}: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -361,7 +350,6 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   }
 
   Widget _buildContent(BuildContext context) {
-
     final l10n = GvlCommentsL10n.of(context);
     final t = GvlCommentsTheme.of(context);
 
@@ -397,8 +385,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     // Server-side RLS / views already hide hard-deleted comments.
     final comments = _comments ?? [];
 
-    final padding = widget.padding ??
-        EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
+    final padding =
+        widget.padding ?? EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
 
     final hasMoreRow = _hasMore && comments.isNotEmpty;
     final itemCount = comments.length + (hasMoreRow ? 1 : 0);
@@ -449,8 +437,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                 }
 
                 // Apply a subtle entry animation for freshly created comments.
-                final isJustCreated =
-                    _recentlyCreatedCommentIds.contains(c.id);
+                final isJustCreated = _recentlyCreatedCommentIds.contains(c.id);
 
                 Widget animatedItem;
                 if (isJustCreated) {
@@ -512,7 +499,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
               },
             ),
           ),
-          if (CommentsKit.I().currentPlan == 'free') _buildBrandingFooter(context),
+          if (CommentsKit.I().currentPlan == 'free')
+            _buildBrandingFooter(context),
           _buildComposer(context, t, l10n),
         ],
       ),
@@ -526,8 +514,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
 
     final baseStyle =
         (t.timestampStyle ?? textTheme.labelSmall) ?? const TextStyle();
-    final color =
-    (t.timestampStyle?.color ?? colorScheme.onSurfaceVariant).withOpacity(0.85);
+    final color = (t.timestampStyle?.color ?? colorScheme.onSurfaceVariant)
+        .withAlpha(180);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -575,10 +563,10 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   }
 
   Widget _buildComposer(
-      BuildContext context,
-      GvlCommentsThemeData t,
-      GvlCommentsL10n? l10n,
-      ) {
+    BuildContext context,
+    GvlCommentsThemeData t,
+    GvlCommentsL10n? l10n,
+  ) {
     final maxLines = t.composerMaxLines ?? 6;
     final hint = l10n?.addCommentHint;
 
@@ -598,7 +586,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         t.spacing ?? 8,
         (t.spacing ?? 8) / 2,
         t.spacing ?? 8,
-        t.spacing ?? 8,
+        t.spacing ?? 8 + MediaQuery.of(context).viewPadding.bottom,
       ),
       child: Row(
         children: [
@@ -610,17 +598,13 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                     borderRadius: BorderRadius.all(Radius.circular(999)),
                   ),
               child: Container(
-                color: t.backgroundColor ?? Theme.of(context).colorScheme.surface,
-                padding: EdgeInsets.symmetric(
-                  horizontal: (t.spacing ?? 8),
-                  vertical: (t.spacing ?? 4),
-                ),
+                color:
+                    t.backgroundColor ?? Theme.of(context).colorScheme.surface,
                 child: TextField(
                   controller: _ctrl,
                   textInputAction: TextInputAction.newline,
                   maxLines: null,
                   minLines: 1,
-
                   decoration: InputDecoration(
                     hintText: hint,
                     isDense: true,
@@ -628,18 +612,20 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                       borderRadius: BorderRadius.circular(999),
                     ),
                     filled: true,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHigh,
                   ),
                 ),
               ),
             ),
           ),
-          SizedBox(width: (t.spacing ?? 8)/2),
+          SizedBox(width: (t.spacing ?? 8) / 2),
           widget.sendButtonBuilder != null
               ? widget.sendButtonBuilder!(
-            context,
-            _sending ? () {} : _send,
-            _sending,
-          )
+                  context,
+                  _sending ? () {} : _send,
+                  _sending,
+                )
               : SizedBox(
                   height: 40,
                   width: 40,
@@ -679,17 +665,16 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       child: Center(
         child: _loadingMore
             ? const SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        )
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : TextButton(
-          onPressed: _loadMore,
-          child: Text(
-            l10n?.loadPreviousCommentsLabel ??
-                'Load previous comments',
-          ),
-        ),
+                onPressed: _loadMore,
+                child: Text(
+                  l10n?.loadPreviousCommentsLabel ?? 'Load previous comments',
+                ),
+              ),
       ),
     );
   }
@@ -704,8 +689,7 @@ String _commentDisplayText(CommentModel comment, GvlCommentsL10n? l10n) {
 
   // Reported-but-pending comments: show a "reported" placeholder.
   if (comment.isReported) {
-    return l10n?.reportedPlaceholderLabel ??
-        'This comment has been reported.';
+    return l10n?.reportedPlaceholderLabel ?? 'This comment has been reported.';
   }
 
   // Normal case: show the raw body.
@@ -723,7 +707,7 @@ List<InlineSpan> _buildLinkedSpans(
   }
 
   final regex = RegExp(
-    r'((https?:\/\/|www\.)[^\s]+|[\w\.\-]+@[\w\.\-]+\.\w+)',
+    r'((https?://|www\.)\S+|[\w.\-]+@[\w.\-]+\.\w+)',
     caseSensitive: false,
   );
 
@@ -754,7 +738,7 @@ List<InlineSpan> _buildLinkedSpans(
             }
 
             final uri = Uri.tryParse(link);
-            if (uri != null && await canLaunchUrl(uri)) {
+            if (uri != null) {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             }
           },
@@ -779,12 +763,11 @@ class _DefaultCommentItem extends StatelessWidget {
   final bool isSending;
 
   const _DefaultCommentItem({
-    Key? key,
     required this.comment,
     required this.isMine,
     this.avatarBuilder,
     this.isSending = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -803,9 +786,10 @@ class _DefaultCommentItem extends StatelessWidget {
     final avatarSize = t.avatarSize ?? 32;
     final showAvatars = t.showAvatars ?? true;
 
-    final tsBase = t.timestampStyle ?? text.bodySmall ?? const TextStyle(fontSize: 11);
+    final tsBase =
+        t.timestampStyle ?? text.bodySmall ?? const TextStyle(fontSize: 11);
     final tsColor =
-        (t.timestampStyle?.color ?? cs.onSurfaceVariant).withOpacity(0.8);
+        (t.timestampStyle?.color ?? cs.onSurfaceVariant).withAlpha(180);
 
     Widget? avatar;
     if (showAvatars) {
@@ -817,15 +801,18 @@ class _DefaultCommentItem extends StatelessWidget {
         final avatarUrl = comment.avatarUrl?.trim();
 
         avatar = (avatarUrl != null && avatarUrl.isNotEmpty)
-            ? Image.network(
-                avatarUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return _InitialsAvatar(
-                    initial: initial,
-                    textStyle: text.bodyMedium,
-                  );
-                },
+            ? ColoredBox(
+                color: cs.secondaryContainer,
+                child: Image.network(
+                  avatarUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _InitialsAvatar(
+                      initial: initial,
+                      textStyle: text.bodyMedium,
+                    );
+                  },
+                ),
               )
             : _InitialsAvatar(
                 initial: initial,
@@ -953,7 +940,8 @@ class _InitialsAvatar extends StatelessWidget {
       child: Center(
         child: Text(
           initial,
-          style: (textStyle ?? Theme.of(context).textTheme.bodyMedium)?.copyWith(
+          style:
+              (textStyle ?? Theme.of(context).textTheme.bodyMedium)?.copyWith(
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -990,42 +978,42 @@ class GvlCommentMeta {
 
 /// Signature for building a single comment widget.
 typedef CommentItemBuilder = Widget Function(
-    BuildContext context,
-    CommentModel comment,
-    GvlCommentMeta meta,
-    );
+  BuildContext context,
+  CommentModel comment,
+  GvlCommentMeta meta,
+);
 
 /// Signature for building separators between list items.
 typedef SeparatorBuilder = Widget Function(
-    BuildContext context,
-    );
+  BuildContext context,
+);
 
 /// Signature for building avatar widgets.
 typedef AvatarBuilder = Widget Function(
-    BuildContext context,
-    CommentModel comment,
-    double size,
-    );
+  BuildContext context,
+  CommentModel comment,
+  double size,
+);
 
 /// Signature for building a custom send button.
 typedef SendButtonBuilder = Widget Function(
-    BuildContext context,
-    VoidCallback onPressed,
-    bool isSending,
-    );
+  BuildContext context,
+  VoidCallback onPressed,
+  bool isSending,
+);
 
 /// Allows replacing the whole composer (input + send button).
 ///
 /// The builder receives the current [TextEditingController], callbacks for
 /// submit actions, and the computed maximum line count for the text field.
 typedef ComposerBuilder = Widget Function(
-    BuildContext context, {
-    required TextEditingController controller,
-    required VoidCallback onSubmit,
-    required bool isSending,
-    required int maxLines,
-    required String hintText,
-    });
+  BuildContext context, {
+  required TextEditingController controller,
+  required VoidCallback onSubmit,
+  required bool isSending,
+  required int maxLines,
+  required String hintText,
+});
 
 /// Theme extension used to style the comments list and composer.
 @immutable
@@ -1194,7 +1182,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       ),
       timestampStyle: ts?.copyWith(
         fontSize: (ts.fontSize ?? 12) - 1,
-        color: cs.onSurfaceVariant.withOpacity(0.85),
+        color: cs.onSurfaceVariant.withAlpha(180),
       ),
     );
   }
@@ -1226,8 +1214,8 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
 
     // Bubble: playful + clearly differentiated mine vs others.
     // We keep opacity to avoid neon-looking UIs in some schemes.
-    final mine = cs.primaryContainer.withOpacity(0.92);
-    final other = cs.secondaryContainer.withOpacity(0.70);
+    final mine = cs.primaryContainer.withAlpha(220);
+    final other = cs.secondaryContainer.withAlpha(180);
 
     return base.copyWith(
       bubbleColor: mine,
@@ -1247,7 +1235,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       ),
       timestampStyle:
           (base.timestampStyle ?? theme.textTheme.bodySmall)?.copyWith(
-        color: cs.onSurfaceVariant.withOpacity(0.85),
+        color: cs.onSurfaceVariant.withAlpha(180),
       ),
     );
   }
@@ -1278,6 +1266,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   }
 
   @override
+
   /// Returns a copy with selectively overridden properties.
   GvlCommentsThemeData copyWith({
     Color? bubbleColor,
@@ -1322,11 +1311,12 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   }
 
   @override
+
   /// Linearly interpolates between two themes.
   ThemeExtension<GvlCommentsThemeData> lerp(
-      ThemeExtension<GvlCommentsThemeData>? other,
-      double t,
-      ) {
+    ThemeExtension<GvlCommentsThemeData>? other,
+    double t,
+  ) {
     if (other is! GvlCommentsThemeData) return this;
     return GvlCommentsThemeData(
       bubbleColor: Color.lerp(bubbleColor, other.bubbleColor, t),
@@ -1346,8 +1336,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
       bubbleRadius: BorderRadius.lerp(bubbleRadius, other.bubbleRadius, t),
       composerShape: t < 0.5 ? composerShape : other.composerShape,
       elevation: lerpDoubleNullable(elevation, other.elevation, t),
-      composerMaxLines:
-      t < 0.5 ? composerMaxLines : other.composerMaxLines,
+      composerMaxLines: t < 0.5 ? composerMaxLines : other.composerMaxLines,
     );
   }
 
@@ -1355,8 +1344,7 @@ class GvlCommentsThemeData extends ThemeExtension<GvlCommentsThemeData> {
   /// inputs are `null`.
   static double? lerpDoubleNullable(double? a, double? b, double t) {
     if (a == null && b == null) return null;
-    return Tween<double>(begin: a ?? b ?? 0, end: b ?? a ?? 0)
-        .transform(t);
+    return Tween<double>(begin: a ?? b ?? 0, end: b ?? a ?? 0).transform(t);
   }
 }
 
@@ -1366,24 +1354,23 @@ class GvlCommentsTheme extends InheritedWidget {
   final GvlCommentsThemeData data;
 
   const GvlCommentsTheme({
-    Key? key,
+    super.key,
     required this.data,
-    required Widget child,
-  }) : super(key: key, child: child);
+    required super.child,
+  });
 
   /// Resolves the effective theme by merging defaults, global extensions, and
   /// the nearest [GvlCommentsTheme] ancestor.
   static GvlCommentsThemeData of(BuildContext context) {
     final local =
-    context.dependOnInheritedWidgetOfExactType<GvlCommentsTheme>();
+        context.dependOnInheritedWidgetOfExactType<GvlCommentsTheme>();
     final ext = Theme.of(context).extension<GvlCommentsThemeData>();
     final base = GvlCommentsThemeData.defaults(context);
     return base.merge(ext).merge(local?.data);
   }
 
   @override
-  bool updateShouldNotify(GvlCommentsTheme oldWidget) =>
-      data != oldWidget.data;
+  bool updateShouldNotify(GvlCommentsTheme oldWidget) => data != oldWidget.data;
 }
 
 /// Immutable bundle of localized strings used by the comments UI.
@@ -1411,19 +1398,19 @@ class GvlCommentsStrings {
 
   /// French localization for the built-in strings.
   factory GvlCommentsStrings.fr() => const GvlCommentsStrings(
-    errorTitle: 'Erreur',
-    retry: 'Réessayer',
-    send: 'Envoyer',
-    hintAddComment: 'Ajouter un commentaire…',
-  );
+        errorTitle: 'Erreur',
+        retry: 'Réessayer',
+        send: 'Envoyer',
+        hintAddComment: 'Ajouter un commentaire…',
+      );
 
   /// English localization for the built-in strings.
   factory GvlCommentsStrings.en() => const GvlCommentsStrings(
-    errorTitle: 'Error',
-    retry: 'Retry',
-    send: 'Send',
-    hintAddComment: 'Add a comment…',
-  );
+        errorTitle: 'Error',
+        retry: 'Retry',
+        send: 'Send',
+        hintAddComment: 'Add a comment…',
+      );
 
   /// Returns a copy with selectively overridden labels.
   GvlCommentsStrings copyWith({

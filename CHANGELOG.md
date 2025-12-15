@@ -2,6 +2,12 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+### 0.9.2
+- Fix external link handling (URLs without scheme now open correctly)
+- Improve composer layout and safe-area padding
+- Better avatar rendering
+- Minor visual refinements for comment bubbles and input
+
 ## 0.9.1
 - Initial public release on pub.dev
 - Added install key initialization + platform binding headers

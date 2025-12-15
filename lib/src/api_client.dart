@@ -51,7 +51,7 @@ class ApiClient {
         return decoded
             .whereType<Map>() // filtre au cas où
             .map<Map<String, dynamic>>(
-                (m) => Map<String, dynamic>.from(m as Map))
+                (m) => Map<String, dynamic>.from(m))
             .toList();
       }
       throw StateError('Expected a JSON array, got: ${res.body}');
