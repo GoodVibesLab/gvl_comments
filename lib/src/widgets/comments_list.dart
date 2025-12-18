@@ -581,67 +581,70 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       );
     }
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        t.spacing ?? 8,
-        (t.spacing ?? 8) / 2,
-        t.spacing ?? 8,
-        t.spacing ?? 8 + MediaQuery.of(context).viewPadding.bottom,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Material(
-              color: Theme.of(context).colorScheme.surface,
-              shape: t.composerShape ??
-                  const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
-                  ),
-              child: Container(
-                color:
-                    t.backgroundColor ?? Theme.of(context).colorScheme.surface,
-                child: TextField(
-                  controller: _ctrl,
-                  textInputAction: TextInputAction.newline,
-                  maxLines: null,
-                  minLines: 1,
-                  decoration: InputDecoration(
-                    hintText: hint,
-                    isDense: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          t.spacing ?? 8,
+          (t.spacing ?? 8) / 2,
+          t.spacing ?? 8,
+          t.spacing ?? 8,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Material(
+                color: Theme.of(context).colorScheme.surface,
+                shape: t.composerShape ??
+                    const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(999)),
                     ),
-                    filled: true,
-                    fillColor:
-                        Theme.of(context).colorScheme.surfaceContainerHigh,
+                child: Container(
+                  color: t.backgroundColor ??
+                      Theme.of(context).colorScheme.surface,
+                  child: TextField(
+                    controller: _ctrl,
+                    textInputAction: TextInputAction.newline,
+                    maxLines: null,
+                    minLines: 1,
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      filled: true,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHigh,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          SizedBox(width: (t.spacing ?? 8) / 2),
-          widget.sendButtonBuilder != null
-              ? widget.sendButtonBuilder!(
-                  context,
-                  _sending ? () {} : _send,
-                  _sending,
-                )
-              : SizedBox(
-                  height: 40,
-                  width: 40,
-                  child: IconButton.filled(
-                    onPressed: _sending ? null : _send,
-                    tooltip: l10n?.sendTooltip,
-                    icon: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
+            SizedBox(width: (t.spacing ?? 8) / 2),
+            widget.sendButtonBuilder != null
+                ? widget.sendButtonBuilder!(
+                    context,
+                    _sending ? () {} : _send,
+                    _sending,
+                  )
+                : SizedBox(
+                    height: 40,
+                    width: 40,
+                    child: IconButton.filled(
+                      onPressed: _sending ? null : _send,
+                      tooltip: l10n?.sendTooltip,
+                      icon: _sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
+                    ),
                   ),
-                ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -774,9 +777,16 @@ class _DefaultCommentItem extends StatelessWidget {
     final t = GvlCommentsTheme.of(context);
     final cs = Theme.of(context).colorScheme;
 
+    final baseMine = t.bubbleColor ?? cs.surface;
+    final baseOther = t.bubbleAltColor ?? cs.surface;
+
     final bg = isMine
-        ? (t.bubbleColor ?? cs.surfaceContainerHighest)
-        : (t.bubbleAltColor ?? cs.surfaceContainer);
+        ? baseMine
+        : Color.alphaBlend(
+            cs.onSurface.withAlpha(10),
+            baseOther,
+          );
+
     final text = Theme.of(context).textTheme;
     final l10n = GvlCommentsL10n.of(context);
 

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_client.dart';
@@ -18,7 +18,14 @@ class CommentsKit {
   ///
   /// Call [initialize] before invoking this method. Accessing [I] without prior
   /// initialization will throw a runtime error.
-  static CommentsKit I() => _instance!;
+  static CommentsKit I() {
+    final i = _instance;
+    if (i == null) {
+      throw StateError(
+          'CommentsKit not initialized. Call CommentsKit.initialize() first.');
+    }
+    return i;
+  }
 
   static CommentsKit get instance => I();
 
@@ -29,6 +36,37 @@ class CommentsKit {
   ModerationSettings? _cachedSettings;
 
   CommentsKit._(this._config, this._http);
+
+  // ===== Logging (debug-only) =====
+
+  static const String _logPrefix = 'gvl_comments:';
+
+  static void _log(String message) {
+    if (kReleaseMode) return;
+    // ignore: avoid_print
+    debugPrint('$_logPrefix $message');
+  }
+
+  static void _logError(String message, [Object? error]) {
+    if (kReleaseMode) return;
+    // ignore: avoid_print
+    debugPrint(
+        '$_logPrefix ERROR – $message${error != null ? " ($error)" : ""}');
+  }
+
+  static String _safeKeyPrefix(String key) {
+    final k = key.trim();
+    if (k.isEmpty) return '(empty)';
+    if (k.length <= 10) return '$k…';
+    return '${k.substring(0, 10)}…';
+  }
+
+  static String _safeUserId(String id) {
+    final u = id.trim();
+    if (u.isEmpty) return '(empty)';
+    if (u.length <= 6) return u;
+    return '${u.substring(0, 3)}…${u.substring(u.length - 2)}';
+  }
 
   /// Current billing plan for this install (e.g. "free", "starter", "pro").
   ///
@@ -46,12 +84,22 @@ class CommentsKit {
     required String installKey,
     http.Client? httpClient,
   }) async {
-    final cfg = await CommentsConfig.detect(installKey: installKey);
+    final trimmedKey = installKey.trim();
+    if (trimmedKey.isEmpty) {
+      _logError(
+        'install key missing. Create one at https://goodvibeslab.cloud and pass it via --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
+      );
+      throw StateError('GVL install key missing');
+    }
+    final cfg = await CommentsConfig.detect(installKey: trimmedKey);
     _instance = CommentsKit._(cfg, ApiClient(httpClient: httpClient));
+    _log(
+        'initialized (platform=${cfg.platform}, package=${cfg.packageName}, key=${_safeKeyPrefix(cfg.installKey)})');
   }
 
   /// Clears the cached JWT (for example when the user changes).
   void invalidateToken() {
+    _log('token cache cleared');
     _tokens.clear();
     _cachedSettings = null;
   }
@@ -60,7 +108,10 @@ class CommentsKit {
 
   Future<String> _getBearer({UserProfile? user}) async {
     final cached = _tokens.validBearer();
-    if (cached != null) return cached;
+    if (cached != null) {
+      _log('auth token cache hit');
+      return cached;
+    }
 
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -79,16 +130,29 @@ class CommentsKit {
         },
     };
 
-    final json = await _http.postJson(
-      _config.apiBase.resolve('token'),
-      body,
-      headers: headers,
-    );
+    _log('requesting auth token');
+
+    Map<String, dynamic> json;
+    try {
+      json = await _http.postJson(
+        _config.apiBase.resolve('token'),
+        body,
+        headers: headers,
+      );
+    } catch (e) {
+      _logError(
+        'failed to obtain auth token. Check your install key at https://goodvibeslab.cloud (key=${_safeKeyPrefix(_config.installKey)})',
+        e,
+      );
+      rethrow;
+    }
 
     final token = json['access_token'] as String;
     final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
     final plan = json['plan'] as String?;
     _tokens.save(token, expiresIn, plan: plan);
+    _log(
+        'auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
     return token;
   }
 
@@ -131,6 +195,8 @@ class CommentsKit {
   }) async {
     try {
       final bearer = await _getBearer(user: user);
+      _log(
+          'loading comments (limit=$limit${before != null ? ", paginated" : ""})');
 
       // Build a safe URL using queryParameters (no manual encoding, avoids double-encoding bugs).
       final params = <String, String>{
@@ -149,7 +215,10 @@ class CommentsKit {
 
       return list.map((e) => CommentModel.fromJson(e)).toList();
     } catch (e, stack) {
-      debugPrintStack(stackTrace: stack);
+      if (!kReleaseMode) {
+        debugPrintStack(stackTrace: stack);
+      }
+      _logError('failed to load comments', e);
       throw StateError('Failed to load comments: $e');
     }
   }
@@ -165,16 +234,23 @@ class CommentsKit {
     required String body,
     required UserProfile user,
   }) async {
+    _log('posting comment');
     final bearer = await _getBearer(user: user);
-    final json = await _http.postJson(
-      _config.apiBase.resolve('comments'),
-      {
-        'threadKey': threadKey,
-        'body': body,
-      },
-      headers: {'Authorization': 'Bearer $bearer'},
-    );
-    return CommentModel.fromJson(json);
+    try {
+      final json = await _http.postJson(
+        _config.apiBase.resolve('comments'),
+        {
+          'threadKey': threadKey,
+          'body': body,
+        },
+        headers: {'Authorization': 'Bearer $bearer'},
+      );
+      _log('comment posted');
+      return CommentModel.fromJson(json);
+    } catch (e) {
+      _logError('failed to post comment', e);
+      rethrow;
+    }
   }
 
   /// Reports a comment.
@@ -187,14 +263,22 @@ class CommentsKit {
     String? reason,
   }) async {
     final bearer = await _getBearer(user: user);
-    final json = await _http.postJson(
-      _config.apiBase.resolve('comments/report'),
-      {
-        'commentId': commentId,
-        if (reason != null) 'reason': reason,
-      },
-      headers: {'Authorization': 'Bearer $bearer'},
-    );
+    _log('reporting comment');
+    Map<String, dynamic> json;
+    try {
+      json = await _http.postJson(
+        _config.apiBase.resolve('comments/report'),
+        {
+          'commentId': commentId,
+          if (reason != null) 'reason': reason,
+        },
+        headers: {'Authorization': 'Bearer $bearer'},
+      );
+      _log('report sent');
+    } catch (e) {
+      _logError('failed to report comment', e);
+      rethrow;
+    }
 
     // Two possible shapes:
     // - duplicate: { "status": "ok", "duplicate": true }
@@ -208,6 +292,7 @@ class CommentsKit {
   /// avoid disrupting the user experience.
   Future<void> identify(UserProfile user) async {
     try {
+      _log('identify user=${_safeUserId(user.id)}');
       final bearer = await _getBearer(user: user);
 
       await _http.postJson(
@@ -220,8 +305,12 @@ class CommentsKit {
           'Authorization': 'Bearer $bearer',
         },
       );
-    } catch (e) {
-      throw StateError('Failed to identify user: $e');
+    } catch (e, stack) {
+      if (!kReleaseMode) {
+        debugPrintStack(stackTrace: stack);
+      }
+      _logError('failed to identify user (non-fatal)', e);
+      // Best-effort: do not throw.
     }
   }
 }

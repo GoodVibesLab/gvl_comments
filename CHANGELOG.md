@@ -2,6 +2,14 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 0.9.3
+- Added debug-only SDK logs (`gvl_comments:` prefix)
+- Clear initialization log on startup
+- Improved error diagnostics for missing or invalid install key
+- Safe obfuscation of sensitive values in logs (API key, user id)
+- Better resilience when authentication fails (non-fatal identify)
+- Minor UI improvements
+
 ### 0.9.2
 - Fix external link handling (URLs without scheme now open correctly)
 - Improve composer layout and safe-area padding

@@ -1,12 +1,23 @@
 # GVL Comments (Flutter)
 
-A production‑ready Flutter comments UI for **GoodVibesLab Comments SaaS**.
+**Version:** 0.9.3
 
-You initialize the SDK once with an **install key**, then drop a ready‑to‑use widget (`GvlCommentsList`) anywhere in your app. The widget handles pagination, optimistic posting, moderation-aware rendering, reporting and theming.
+<p align="center">
+  <img
+    src="screenshots/flutter_comments_dark.png"
+    width="420"
+    alt="GVL Comments Flutter – dark mode threaded comments UI"
+  />
+</p>
 
-To use the SDK, you must create an account on the dashboard to obtain an install key.
+A production‑ready **Flutter comments UI** for **GoodVibesLab Comments SaaS**.
 
-Create your account at https://goodvibeslab.cloud to get your install key.
+Initialize the SDK once with an **install key**, then drop a ready‑to‑use widget (`GvlCommentsList`) anywhere in your app.  
+The widget handles **pagination, optimistic posting, moderation‑aware rendering, reporting, and full theming** out of the box.
+
+To use the SDK, you need an **install key**.
+
+👉 Dashboard: https://goodvibeslab.cloud
 
 ---
 
@@ -14,12 +25,12 @@ Create your account at https://goodvibeslab.cloud to get your install key.
 
 - ⚡ Fast comment loading (Supabase + Edge)
 - 🔐 Tenant‑isolated data with strict RLS
-- 🧠 Moderation-aware UI (pending / moderated / reported)
+- 🧠 Moderation‑aware UI (pending / moderated / reported)
 - 🤖 AI moderation (paid plans)
 - 📣 User reporting (when enabled by your plan/settings)
-- 🔁 Cursor-based pagination
+- 🔁 Cursor‑based pagination
 - 🧵 Threaded comments keyed by `threadKey`
-- 🎨 Customizable UI via builders + theme overrides
+- 🎨 Fully themeable (Material 3 compatible)
 
 ---
 
@@ -32,14 +43,6 @@ dependencies:
   gvl_comments: ^<latest>
 ```
 
-### Local path (monorepo)
-
-```yaml
-dependencies:
-  gvl_comments:
-    path: packages/gvl_comments
-```
-
 Then:
 
 ```sh
@@ -48,15 +51,17 @@ flutter pub get
 
 ---
 
-## 🚀 Quick start
+## 🚀 Quick start (in your app)
 
-1) Get your **install key** from the dashboard.
+### 1) Provide your install key
 
-```
+You can inject the key via build‑time environment variables:
+
+```sh
 flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"
 ```
 
-2) Initialize the SDK once at app startup:
+### 2) Initialize the SDK
 
 ```dart
 import 'package:flutter/material.dart';
@@ -87,19 +92,18 @@ class DemoApp extends StatelessWidget {
     return MaterialApp(
       title: 'GVL Comments Demo',
       localizationsDelegates: GvlCommentsL10n.localizationsDelegates,
+      supportedLocales: GvlCommentsL10n.supportedLocales,
       home: Scaffold(
         appBar: AppBar(title: const Text('GVL Comments Demo')),
         body: GvlCommentsList(
-          threadKey: 'your_post_id_or_other_unique_key',
+          threadKey: 'post:example',
           newestAtBottom: false,
           limit: 10,
           user: UserProfile(
-            id: 'user_id_string',
+            id: 'user_1',
             name: 'John Doe',
-            avatarUrl:
-                'https://example.com/path/to/avatar.jpg',
+            avatarUrl: 'https://example.com/avatar.png',
           ),
-
           theme: GvlCommentsThemeData.bubble(context),
         ),
       ),
@@ -108,18 +112,44 @@ class DemoApp extends StatelessWidget {
 }
 ```
 
-That’s it: you get a complete comments UI (list + composer) with pagination.
+That’s it — you now have a complete comments UI (list + composer).
+
+---
+
+## ▶️ Run the example app
+
+The repository includes a full **example app** showcasing GVL Comments in a real Flutter environment.
+
+### 1) Clone the repo
+
+```sh
+git clone https://github.com/goodvibeslab/gvl_comments.git
+cd gvl_comments
+```
+
+### 2) Run the example
+
+```sh
+cd example
+flutter pub get
+flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"
+```
+
+The example app:
+- generates a **stable guest user** per device/emulator
+- supports light & dark mode
+- demonstrates pagination, optimistic posting, links, and theming
 
 ---
 
 ## 🧵 Thread keys
 
-Flutter uses `threadKey` (a string like `post:123`, `article:abc`, `video:xyz`).
+Flutter uses a simple string `threadKey` (e.g. `post:123`, `article:abc`).
 
-- A thread is created/resolved server-side by `threadKey`.
-- You do **not** need a UUID thread id in the Flutter widget.
+- Threads are created/resolved server‑side
+- No UUID or pre‑creation required
 
-Choose a deterministic key from your domain model (post id, screen id, etc.).
+Choose a deterministic key from your domain model.
 
 ---
 
@@ -127,17 +157,18 @@ Choose a deterministic key from your domain model (post id, screen id, etc.).
 
 `GvlCommentsList` requires a `UserProfile` so the SDK can:
 
-- identify the user server-side
+- identify the user server‑side
 - attach author metadata to posted comments
-- apply moderation/reporting rules consistently
+- apply moderation and reporting rules
 
-At minimum you provide an `id`. `name` and `avatarUrl` are optional but strongly recommended.
+At minimum, provide a stable `id`.  
+`name` and `avatarUrl` are optional but strongly recommended.
 
 ---
 
 ## 🔁 Updating the current user
 
-If your user changes (login/logout, account switch), call `identify()` again.
+If the active user changes (login/logout, account switch):
 
 ```dart
 final newUser = UserProfile(
@@ -148,9 +179,8 @@ final newUser = UserProfile(
 
 await CommentsKit.instance.identify(newUser);
 ```
-`CommentsKit.I()` is equivalent — `instance` is just a nicer alias.
 
-If you want to force a fresh auth token when switching users:
+To force a fresh auth token:
 
 ```dart
 CommentsKit.instance.invalidateToken();
@@ -161,24 +191,36 @@ await CommentsKit.instance.identify(newUser);
 
 ## 🎨 Customization
 
-`GvlCommentsList` is ready-to-use, but exposes builder hooks for full control:
+You can fully customize rendering using builder hooks:
 
-- `commentItemBuilder` — fully override comment row rendering
-- `avatarBuilder` — custom avatar widget
-- `sendButtonBuilder` — custom send button
-- `composerBuilder` — replace the whole composer
-- `separatorBuilder` — separators between items
+- `commentItemBuilder`
+- `avatarBuilder`
+- `sendButtonBuilder`
+- `composerBuilder`
+- `separatorBuilder`
 
-You can also override styling with:
+And style everything via:
 
-- `theme: GvlCommentsThemeData...` (e.g. `GvlCommentsThemeData.bubble(context)`)
-- `GvlCommentsTheme` wrapper for local theme overrides
+```dart
+theme: GvlCommentsThemeData.bubble(context)
+```
+
+or with a local `GvlCommentsTheme` wrapper.
+
+---
+
+## 🛠 Troubleshooting
+
+### “API key not valid”
+- Ensure `GVL_INSTALL_KEY` is set at build time
+- Ensure the key starts with `cmt_live_` or `cmt_test_`
+- Create or copy a valid key from the dashboard
+
+👉 https://goodvibeslab.cloud
 
 ---
 
 ## 🛠 Support
-
-For help, reach out at:
 
 **contact@goodvibeslab.app**
 
@@ -186,5 +228,5 @@ For help, reach out at:
 
 ## 📝 License
 
-Proprietary / commercial license, included with all GoodVibesLab paid plans.
+Proprietary / commercial license, included with all GoodVibesLab paid plans.  
 A free tier may be available for evaluation.
