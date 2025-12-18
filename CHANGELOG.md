@@ -2,6 +2,9 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 0.9.4
+- Example app now runs out-of-the-box with a built-in demo install key
+
 ## 0.9.3
 - Added debug-only SDK logs (`gvl_comments:` prefix)
 - Clear initialization log on startup
@@ -10,7 +13,7 @@ All notable changes to the **GoodVibesLab Comments Client (Flutter)** package wi
 - Better resilience when authentication fails (non-fatal identify)
 - Minor UI improvements
 
-### 0.9.2
+## 0.9.2
 - Fix external link handling (URLs without scheme now open correctly)
 - Improve composer layout and safe-area padding
 - Better avatar rendering

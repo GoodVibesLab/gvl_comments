@@ -3,11 +3,7 @@
 **Version:** 0.9.3
 
 <p align="center">
-  <img
-    src="screenshots/flutter_comments_dark.png"
-    width="420"
-    alt="GVL Comments Flutter – dark mode threaded comments UI"
-  />
+  <img src="screenshots/flutter_comments_dark.png" width="420" />
 </p>
 
 A production‑ready **Flutter comments UI** for **GoodVibesLab Comments SaaS**.
@@ -132,13 +128,14 @@ cd gvl_comments
 ```sh
 cd example
 flutter pub get
-flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"
+flutter run
 ```
 
 The example app:
 - generates a **stable guest user** per device/emulator
 - supports light & dark mode
 - demonstrates pagination, optimistic posting, links, and theming
+
 
 ---
 
