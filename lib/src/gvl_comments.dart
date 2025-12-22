@@ -75,6 +75,14 @@ class CommentsKit {
   /// [invalidateToken] is called.
   String? get currentPlan => _tokens.plan;
 
+  /// Last pagination cursor returned by the API (opaque).
+  ///
+  /// When present, pass it back via `cursor:` to fetch the next page.
+  String? lastNextCursor;
+
+  /// Whether the API indicates more pages are available.
+  bool lastHasMore = false;
+
   /// Minimal initialization with install key only.
   ///
   /// Provide your GoodVibesLab [installKey] and an optional custom [httpClient]
@@ -97,9 +105,17 @@ class CommentsKit {
         'initialized (platform=${cfg.platform}, package=${cfg.packageName}, key=${_safeKeyPrefix(cfg.installKey)})');
   }
 
+  /// Disposes the SDK instance and clears cached tokens.
+  void dispose() {
+    invalidateToken();
+    _http.close();
+  }
+
   /// Clears the cached JWT (for example when the user changes).
   void invalidateToken() {
     _log('token cache cleared');
+    lastNextCursor = null;
+    lastHasMore = false;
     _tokens.clear();
     _cachedSettings = null;
   }
@@ -182,37 +198,46 @@ class CommentsKit {
 
   /// Lists comments for a thread key.
   ///
-  /// [before] is an optional ISO-8601 cursor (created_at). If provided, only
-  /// comments with a `created_at` timestamp earlier than [before] are returned.
-  /// This method handles pagination and returns comments in reverse
-  /// chronological order. [limit] controls the maximum number of comments to
-  /// retrieve per call. Throws when network calls fail.
+  /// Pagination:
+  /// - Prefer [cursor] (opaque) which comes from the `x-next-cursor` response header.
+  /// - [before] is legacy (ISO-8601 created_at) and may skip items when multiple
+  ///   comments share the same timestamp.
+  ///
+  /// [limit] controls the maximum number of comments to retrieve per call. Throws when network calls fail.
   Future<List<CommentModel>> listByThreadKey(
     String threadKey, {
     required UserProfile user,
     int limit = 50,
     String? before,
+    String? cursor,
   }) async {
     try {
       final bearer = await _getBearer(user: user);
       _log(
-          'loading comments (limit=$limit${before != null ? ", paginated" : ""})');
+          'loading comments (limit=$limit${(cursor != null || before != null) ? ", paginated" : ""})');
 
       // Build a safe URL using queryParameters (no manual encoding, avoids double-encoding bugs).
       final params = <String, String>{
         'thread': threadKey,
         'limit': '$limit',
-        if (before != null) 'before': before,
+        if (cursor != null) 'cursor': cursor,
+        if (cursor == null && before != null) 'before': before,
       };
 
       final url =
           _config.apiBase.resolve('comments').replace(queryParameters: params);
 
-      final list = await _http.getList(
+      final res = await _http.getRaw(
         url,
         headers: {'Authorization': 'Bearer $bearer'},
       );
 
+      // Capture pagination headers (best-effort).
+      lastNextCursor = res.headers['x-next-cursor'];
+      final hm = res.headers['x-has-more']?.toLowerCase();
+      lastHasMore = hm == 'true' || hm == '1';
+
+      final list = await _http.decodeListResponse(res);
       return list.map((e) => CommentModel.fromJson(e)).toList();
     } catch (e, stack) {
       if (!kReleaseMode) {
@@ -284,6 +309,38 @@ class CommentsKit {
     // - duplicate: { "status": "ok", "duplicate": true }
     // - fresh: [ { ... row from comment_reports ... } ]
     return json['duplicate'] == true;
+  }
+
+  /// Sets (or clears) the current user's reaction on a comment.
+  ///
+  /// Passing a non-null [reaction] records the reaction for the current user.
+  /// Passing `null` clears the existing reaction (if any).
+  ///
+  /// This call requires a valid user token and will throw if the network call
+  /// fails.
+  Future<void> setCommentReaction({
+    required String commentId,
+    required UserProfile user,
+    required String? reaction,
+  }) async {
+    final bearer = await _getBearer(user: user);
+    _log(
+        'setting reaction comment=$commentId reaction=${reaction ?? "(clear)"}');
+
+    try {
+      await _http.postJson(
+        _config.apiBase.resolve('comments/react'),
+        {
+          'commentId': commentId,
+          // When null, the API treats it as a "remove".
+          'reaction': reaction,
+        },
+        headers: {'Authorization': 'Bearer $bearer'},
+      );
+    } catch (e) {
+      _logError('failed to set comment reaction', e);
+      rethrow;
+    }
   }
 
   /// Best-effort profile sync (name / avatar) based on the JWT.

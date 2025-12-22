@@ -1,12 +1,12 @@
 # GVL Comments (Flutter)
 
-**Version:** 0.9.3
-
 <p align="center">
-  <img src="screenshots/flutter_comments_dark.png" width="420" />
+  <img src="screenshots/flutter_comments_light.png" width="360" />
+  &nbsp;&nbsp;
+  <img src="screenshots/flutter_comments_dark.png" width="360" />
 </p>
 
-A production‑ready **Flutter comments UI** for **GoodVibesLab Comments SaaS**.
+A production‑ready **Flutter comments UI** for **GoodVibesLab Comments SaaS** — *backend‑less by design*.
 
 Initialize the SDK once with an **install key**, then drop a ready‑to‑use widget (`GvlCommentsList`) anywhere in your app.  
 The widget handles **pagination, optimistic posting, moderation‑aware rendering, reporting, and full theming** out of the box.
@@ -24,6 +24,7 @@ To use the SDK, you need an **install key**.
 - 🧠 Moderation‑aware UI (pending / moderated / reported)
 - 🤖 AI moderation (paid plans)
 - 📣 User reporting (when enabled by your plan/settings)
+- ❤️ Built‑in reactions (with optimistic UI, optional per thread)
 - 🔁 Cursor‑based pagination
 - 🧵 Threaded comments keyed by `threadKey`
 - 🎨 Fully themeable (Material 3 compatible)

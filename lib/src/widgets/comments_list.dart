@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../l10n/gvl_comments_l10n.dart';
 import '../gvl_comments.dart';
 import '../models.dart';
 import '../utils/time_utils.dart';
+import 'comment_reactions_bar.dart';
+import 'linked_text.dart';
 
 /// Ready-to-use comment thread widget with pagination and a composer.
 ///
@@ -50,6 +51,12 @@ class GvlCommentsList extends StatefulWidget {
   /// - newestAtTop = feed-like
   final bool newestAtBottom;
 
+  /// Whether end-users can react to comments (emoji/like bar).
+  ///
+  /// This is a front-end only switch: it hides reaction UI and disables
+  /// reaction interactions without changing backend behavior.
+  final bool reactionsEnabled;
+
   /// Creates a comments list bound to a thread and user profile.
   ///
   /// Provide builder callbacks to customize rendering; otherwise sensible
@@ -68,6 +75,7 @@ class GvlCommentsList extends StatefulWidget {
     this.scrollController,
     this.theme,
     this.newestAtBottom = true,
+    this.reactionsEnabled = true,
   });
 
   @override
@@ -85,7 +93,10 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   // Pagination state
   bool _loadingMore = false;
   bool _hasMore = true;
-  String? _beforeCursor;
+
+  /// Opaque cursor returned by the API in `x-next-cursor`.
+  /// When null, we are at the first page.
+  String? _nextCursor;
 
   bool _userReportsEnabled = true;
 
@@ -120,7 +131,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   void _resetPagination() {
     _comments = null;
     _hasMore = true;
-    _beforeCursor = null;
+    _nextCursor = null;
   }
 
   Future<void> _primeAndLoad() async {
@@ -160,17 +171,16 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         widget.threadKey,
         user: widget.user,
         limit: widget.limit,
-        before: null,
+        cursor: null,
       );
+
+      if (!mounted) return;
 
       setState(() {
         _comments = list;
-        _hasMore = list.length >= widget.limit;
-        if (_comments != null && _comments!.isNotEmpty) {
-          _beforeCursor = _comments!.last.createdAt.toIso8601String();
-        } else {
-          _beforeCursor = null;
-        }
+        // Prefer cursor-based pagination (stable with duplicate timestamps).
+        _nextCursor = kit.lastNextCursor;
+        _hasMore = kit.lastHasMore;
         _loading = false;
       });
     } catch (e) {
@@ -182,7 +192,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   }
 
   Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore || _beforeCursor == null) return;
+    if (_loadingMore || !_hasMore || _nextCursor == null) return;
 
     setState(() {
       _loadingMore = true;
@@ -195,19 +205,17 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         widget.threadKey,
         user: widget.user,
         limit: widget.limit,
-        before: _beforeCursor,
+        cursor: _nextCursor,
       );
+
+      if (!mounted) return;
 
       setState(() {
         final current = _comments ?? <CommentModel>[];
         _comments = [...current, ...list];
 
-        _hasMore = list.length >= widget.limit;
-        if (_comments != null && _comments!.isNotEmpty) {
-          _beforeCursor = _comments!.last.createdAt.toIso8601String();
-        } else {
-          _beforeCursor = null;
-        }
+        _nextCursor = kit.lastNextCursor;
+        _hasMore = kit.lastHasMore;
         _loadingMore = false;
       });
     } catch (e) {
@@ -245,7 +253,12 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     // Add optimistic comment.
     setState(() {
       _pendingIds.add(tempId);
-      _comments = [pending, ...(_comments ?? [])];
+      _recentlyCreatedCommentIds.add(tempId);
+      if (widget.newestAtBottom) {
+        _comments = [...(_comments ?? []), pending];
+      } else {
+        _comments = [pending, ...(_comments ?? [])];
+      }
       _ctrl.clear();
     });
 
@@ -257,6 +270,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         user: widget.user,
       );
 
+      if (!mounted) return;
+
       // Replace pending with actual.
       setState(() {
         final list = _comments ?? <CommentModel>[];
@@ -266,6 +281,9 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         }
         _comments = List<CommentModel>.from(list);
         _pendingIds.remove(tempId);
+        _recentlyCreatedCommentIds
+          ..remove(tempId)
+          ..add(created.id);
       });
     } catch (e) {
       // Remove optimistic bubble on failure.
@@ -274,6 +292,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
             .where((c) => c.id != tempId)
             .toList();
         _pendingIds.remove(tempId);
+        _recentlyCreatedCommentIds.remove(tempId);
         _error = e.toString();
       });
     } finally {
@@ -316,6 +335,65 @@ class _GvlCommentsListState extends State<GvlCommentsList>
           ),
         );
       }
+    }
+  }
+
+  /// Applies a reaction to a comment and updates the UI optimistically.
+  ///
+  /// This method is intentionally best-effort: if the API call fails, we keep
+  /// the optimistic state (the next refresh will reconcile with the server).
+  Future<void> _onReact(CommentModel comment, String? reaction) async {
+    // Update local state optimistically.
+    setState(() {
+      final list = _comments ?? <CommentModel>[];
+      final idx = list.indexWhere((c) => c.id == comment.id);
+      if (idx == -1) return;
+
+      final current = list[idx];
+
+      // These fields are expected to be provided by the API:
+      // - viewerReaction: String?
+      // - reactionCounts: Map<String, int>
+      // - reactionTotal: int
+      final prev = current.viewerReaction;
+      final counts = Map<String, int>.from(current.reactionCounts);
+
+      // Remove previous reaction from counts.
+      if (prev != null && prev.isNotEmpty) {
+        final v = (counts[prev] ?? 0) - 1;
+        if (v <= 0) {
+          counts.remove(prev);
+        } else {
+          counts[prev] = v;
+        }
+      }
+
+      // Apply new reaction (or null to remove).
+      if (reaction != null && reaction.isNotEmpty) {
+        counts[reaction] = (counts[reaction] ?? 0) + 1;
+      }
+
+      final total = counts.values.fold<int>(0, (a, b) => a + b);
+
+      list[idx] = current.copyWith(
+        viewerReaction:
+            (reaction != null && reaction.isNotEmpty) ? reaction : null,
+        reactionCounts: counts,
+        reactionTotal: total,
+      );
+
+      _comments = List<CommentModel>.from(list);
+    });
+
+    // Best-effort API update.
+    try {
+      await CommentsKit.I().setCommentReaction(
+        commentId: comment.id,
+        user: widget.user,
+        reaction: reaction,
+      );
+    } catch (e) {
+      debugPrint('gvl_comments: error while setting reaction: $e');
     }
   }
 
@@ -433,6 +511,8 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                     isMine: isMine,
                     avatarBuilder: widget.avatarBuilder,
                     isSending: _pendingIds.contains(c.id),
+                    reactionsEnabled: widget.reactionsEnabled,
+                    onReact: widget.reactionsEnabled ? _onReact : null,
                   );
                 }
 
@@ -499,7 +579,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
               },
             ),
           ),
-          if (CommentsKit.I().currentPlan == 'free')
+          if ((CommentsKit.I().currentPlan ?? 'free') == 'free')
             _buildBrandingFooter(context),
           _buildComposer(context, t, l10n),
         ],
@@ -699,65 +779,6 @@ String _commentDisplayText(CommentModel comment, GvlCommentsL10n? l10n) {
   return comment.body;
 }
 
-List<InlineSpan> _buildLinkedSpans(
-  String text,
-  TextStyle? linkBaseStyle,
-) {
-  final spans = <InlineSpan>[];
-
-  if (text.isEmpty) {
-    return spans;
-  }
-
-  final regex = RegExp(
-    r'((https?://|www\.)\S+|[\w.\-]+@[\w.\-]+\.\w+)',
-    caseSensitive: false,
-  );
-
-  int start = 0;
-
-  for (final match in regex.allMatches(text)) {
-    if (match.start > start) {
-      spans.add(TextSpan(text: text.substring(start, match.start)));
-    }
-
-    final raw = match.group(0)!;
-    spans.add(
-      TextSpan(
-        text: raw,
-        style: (linkBaseStyle ?? const TextStyle()).copyWith(
-          decoration: TextDecoration.underline,
-        ),
-        recognizer: TapGestureRecognizer()
-          ..onTap = () async {
-            String link = raw.trim();
-
-            if (!link.toLowerCase().startsWith('http')) {
-              if (link.contains('@')) {
-                link = 'mailto:$link';
-              } else {
-                link = 'https://$link';
-              }
-            }
-
-            final uri = Uri.tryParse(link);
-            if (uri != null) {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-          },
-      ),
-    );
-
-    start = match.end;
-  }
-
-  if (start < text.length) {
-    spans.add(TextSpan(text: text.substring(start)));
-  }
-
-  return spans;
-}
-
 /// Default comment item (bubble + optional avatar).
 class _DefaultCommentItem extends StatelessWidget {
   final CommentModel comment;
@@ -765,11 +786,21 @@ class _DefaultCommentItem extends StatelessWidget {
   final AvatarBuilder? avatarBuilder;
   final bool isSending;
 
+  /// Whether end-users can react to comments (emoji/like bar).
+  final bool reactionsEnabled;
+
+  /// Called when the user selects or clears a reaction.
+  ///
+  /// If `reaction` is `null`, the current reaction should be removed.
+  final Future<void> Function(CommentModel comment, String? reaction)? onReact;
+
   const _DefaultCommentItem({
     required this.comment,
     required this.isMine,
     this.avatarBuilder,
     this.isSending = false,
+    this.reactionsEnabled = true,
+    this.onReact,
   });
 
   @override
@@ -831,55 +862,113 @@ class _DefaultCommentItem extends StatelessWidget {
       }
     }
 
-    final bubble = Opacity(
+    final bubbleCore = Opacity(
       opacity: isSending ? 0.55 : 1.0,
-      child: Material(
-        color: bg,
-        elevation: t.elevation ?? 0,
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: Padding(
-            padding: EdgeInsets.all((t.spacing ?? 8) + 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  comment.authorName ?? comment.externalUserId,
-                  style: t.authorStyle ??
-                      text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Material(
+            color: bg,
+            elevation: t.elevation ?? 0,
+            shape: RoundedRectangleBorder(
+              borderRadius:
+                  t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Padding(
+                // Add a tiny extra bottom padding so the overlay doesn't feel cramped.
+                padding: EdgeInsets.fromLTRB(
+                  (t.spacing ?? 8) + 4,
+                  (t.spacing ?? 8) + 4,
+                  (t.spacing ?? 8) + 4,
+                  (t.spacing ?? 8) + 10,
                 ),
-                const SizedBox(height: 4),
-                RichText(
-                  text: TextSpan(
-                    style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                      fontStyle: comment.isVisibleNormally
-                          ? FontStyle.normal
-                          : FontStyle.italic,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      comment.authorName ?? comment.externalUserId,
+                      style: t.authorStyle ??
+                          text.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
                     ),
-                    children: _buildLinkedSpans(
+                    const SizedBox(height: 4),
+                    LinkedText(
                       _commentDisplayText(comment, l10n),
-                      (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                        fontStyle: comment.isVisibleNormally
-                            ? FontStyle.normal
-                            : FontStyle.italic,
+                      style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                        fontStyle: comment.isVisibleNormally ? FontStyle.normal : FontStyle.italic,
                       ),
-                    ),
-                  ),
+                      linkStyle: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                        decoration: TextDecoration.underline,
+                        fontStyle: comment.isVisibleNormally ? FontStyle.normal : FontStyle.italic,
+                      ),
+                    )
+                    // Removed timestamp from inside bubble
+                  ],
                 ),
-                // Removed timestamp from inside bubble
-              ],
+              ),
             ),
           ),
-        ),
+
+          // Overlay the reaction bar on the bottom-right of the bubble.
+          // It auto-hides when there are no reactions.
+          if (reactionsEnabled)
+            Positioned(
+              right: 10,
+              bottom: -10,
+              child: IgnorePointer(
+                ignoring: isSending,
+                child: CommentReactionsBar(
+                  comment: comment,
+                  enabled: !isSending,
+                  onReact: (reaction) {
+                    onReact?.call(comment, reaction);
+                  },
+                ),
+              ),
+            ),
+        ],
       ),
+    );
+
+    // Messenger-like interactions:
+    // - Long-press the bubble to open the reaction picker (even if the bar is hidden).
+    // - Double-tap the bubble to quickly toggle a "like".
+    final bubble = GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: (!isSending && reactionsEnabled && onReact != null)
+          ? () async {
+              final box = context.findRenderObject() as RenderBox?;
+              if (box == null) return;
+
+              final pos = box.localToGlobal(Offset.zero);
+              final size = box.size;
+
+              final anchor =
+                  Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
+              final picked = await showCommentReactionPicker(context,
+                  currentReaction: comment.viewerReaction,
+                  anchor: Offset(anchor.left, anchor.bottom));
+              if (picked == null) return;
+
+              // Toggle behavior: selecting the same reaction clears it.
+              final next = (picked == comment.viewerReaction) ? null : picked;
+              await onReact!(comment, next);
+            }
+          : null,
+      onDoubleTap: (!isSending && reactionsEnabled && onReact != null)
+          ? () async {
+              final current = comment.viewerReaction;
+              final next = (current == 'love') ? null : 'love';
+              await onReact!(comment, next);
+            }
+          : null,
+      child: bubbleCore,
     );
 
     final baseSpacing = t.spacing ?? 8;

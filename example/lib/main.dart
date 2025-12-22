@@ -52,7 +52,6 @@ class DemoApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      themeMode: ThemeMode.dark,
       home: Builder(
         // IMPORTANT: this context is below MaterialApp, so Theme.of(context)
         // is the one we configured above.

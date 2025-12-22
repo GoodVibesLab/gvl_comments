@@ -2,6 +2,12 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 0.9.5
+- Added comment reactions (like, love, etc.) with optimistic UI
+- Improved visual polish and interaction feedback
+- Better defaults for spacing, bubble layout, and composer
+- Overall stability and UX improvements
+
 ## 0.9.4
 - Example app now runs out-of-the-box with a built-in demo install key
 
