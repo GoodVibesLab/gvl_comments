@@ -12,6 +12,42 @@ import 'linked_text.dart';
 /// The widget renders a vertically scrolling list of comments for [threadKey]
 /// and exposes builder hooks to customize avatars, bubbles, and the composer.
 /// It fetches data through [CommentsKit] and keeps pagination state internally.
+/// Preferred API name (no `Gvl` prefix).
+///
+/// This is a thin wrapper around [GvlCommentsList] to keep backward
+/// compatibility while exposing a cleaner public surface.
+class CommentsList extends GvlCommentsList {
+  const CommentsList({
+    super.key,
+    required super.threadKey,
+    required super.user,
+    super.commentItemBuilder,
+    super.avatarBuilder,
+    super.sendButtonBuilder,
+    super.composerBuilder,
+    super.separatorBuilder,
+    super.limit,
+    super.padding,
+    super.scrollController,
+    super.theme,
+    super.newestAtBottom,
+    super.reactionsEnabled,
+  });
+}
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentMeta = GvlCommentMeta;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsThemeData = GvlCommentsThemeData;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsTheme = GvlCommentsTheme;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsStrings = GvlCommentsStrings;
+
+@Deprecated('Use CommentsList.')
 class GvlCommentsList extends StatefulWidget {
   /// Unique identifier for the thread to display.
   final String threadKey;
@@ -47,8 +83,8 @@ class GvlCommentsList extends StatefulWidget {
   final GvlCommentsThemeData? theme;
 
   /// Display order of comments.
-  /// - newestAtBottom = chat-like (default)
-  /// - newestAtTop = feed-like
+  /// - true = chat-like (default)
+  /// - false = feed-like
   final bool newestAtBottom;
 
   /// Whether end-users can react to comments (emoji/like bar).
@@ -500,7 +536,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                   baseItem = widget.commentItemBuilder!(
                     ctx,
                     c,
-                    GvlCommentMeta(
+                    CommentMeta(
                       isMine: isMine,
                       isSending: _pendingIds.contains(c.id),
                     ),
@@ -1053,6 +1089,7 @@ class _InitialsAvatar extends StatelessWidget {
 ///
 /// Indicates whether the comment belongs to the current user and exposes basic
 /// interaction callbacks that can be forwarded to custom widgets.
+@Deprecated('Use CommentMeta (alias) or CommentsList builder signatures instead.')
 class GvlCommentMeta {
   /// Whether the comment was authored by the active user.
   final bool isMine;
@@ -1079,7 +1116,7 @@ class GvlCommentMeta {
 typedef CommentItemBuilder = Widget Function(
   BuildContext context,
   CommentModel comment,
-  GvlCommentMeta meta,
+  CommentMeta meta,
 );
 
 /// Signature for building separators between list items.

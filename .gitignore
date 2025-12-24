@@ -2,3 +2,6 @@
 .packages
 build/
 .pub-cache/
+
+android/local.properties
+android/*.iml
