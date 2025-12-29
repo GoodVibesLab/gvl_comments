@@ -27,7 +27,7 @@ apply plugin: "kotlin-android"
 android {
     namespace = "com.goodvibeslab.gvl_comments"
 
-    compileSdk = 36
+    compileSdk = 34
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
