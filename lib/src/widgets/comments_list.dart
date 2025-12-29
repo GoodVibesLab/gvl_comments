@@ -5,6 +5,7 @@ import '../gvl_comments.dart';
 import '../models.dart';
 import '../utils/time_utils.dart';
 import 'comment_reactions_bar.dart';
+import 'comments_error_view.dart';
 import 'linked_text.dart';
 
 /// Ready-to-use comment thread widget with pagination and a composer.
@@ -12,7 +13,54 @@ import 'linked_text.dart';
 /// The widget renders a vertically scrolling list of comments for [threadKey]
 /// and exposes builder hooks to customize avatars, bubbles, and the composer.
 /// It fetches data through [CommentsKit] and keeps pagination state internally.
+/// Preferred API name (no `Gvl` prefix).
+///
+/// This is a thin wrapper around [GvlCommentsList] to keep backward
+/// compatibility while exposing a cleaner public surface.
+class CommentsList extends GvlCommentsList {
+  const CommentsList({
+    super.key,
+    required super.threadKey,
+    required super.user,
+    super.commentItemBuilder,
+    super.avatarBuilder,
+    super.sendButtonBuilder,
+    super.composerBuilder,
+    super.separatorBuilder,
+    super.limit,
+    super.padding,
+    super.scrollController,
+    super.theme,
+    // Inherits default: feed-like ordering (newestAtBottom = false)
+    super.newestAtBottom,
+    super.reactionsEnabled,
+  });
+}
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentMeta = GvlCommentMeta;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsThemeData = GvlCommentsThemeData;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsTheme = GvlCommentsTheme;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsStrings = GvlCommentsStrings;
+
+@Deprecated('Use CommentsList.')
 class GvlCommentsList extends StatefulWidget {
+  /// Default number of comments fetched per page.
+  ///
+  /// Kept intentionally conservative for performance on mobile networks.
+  static const int defaultPageSize = 30;
+
+  /// Hard upper bound for the `limit` parameter.
+  ///
+  /// This protects both the host app and the backend from accidental large
+  /// requests (e.g. `limit: 100000`).
+  static const int maxPageSize = 100;
   /// Unique identifier for the thread to display.
   final String threadKey;
 
@@ -47,8 +95,8 @@ class GvlCommentsList extends StatefulWidget {
   final GvlCommentsThemeData? theme;
 
   /// Display order of comments.
-  /// - newestAtBottom = chat-like (default)
-  /// - newestAtTop = feed-like
+  /// - false = feed-like (default)
+  /// - true = chat-like
   final bool newestAtBottom;
 
   /// Whether end-users can react to comments (emoji/like bar).
@@ -70,11 +118,12 @@ class GvlCommentsList extends StatefulWidget {
     this.sendButtonBuilder,
     this.composerBuilder,
     this.separatorBuilder,
-    this.limit = 50,
+    this.limit = defaultPageSize,
     this.padding,
     this.scrollController,
     this.theme,
-    this.newestAtBottom = true,
+    // Feed-like by default (newest comments first).
+    this.newestAtBottom = false,
     this.reactionsEnabled = true,
   });
 
@@ -87,6 +136,11 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   List<CommentModel>? _comments;
   String? _error;
   final _ctrl = TextEditingController();
+
+  // Scroll controller used by the ListView.
+  // If the host app provides one, we use it; otherwise we create our own.
+  late ScrollController _scrollController;
+  late bool _ownsScrollController;
   bool _loading = true;
   bool _sending = false;
 
@@ -106,18 +160,43 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   // Track freshly created comments for entry animation.
   final Set<String> _recentlyCreatedCommentIds = <String>{};
 
+  /// Sanitized per-page size used for API calls.
+  ///
+  /// We clamp to a safe range so consumers can't accidentally request
+  /// extremely large pages.
+  int get _effectiveLimit {
+    final raw = widget.limit;
+    if (raw <= 0) return 1;
+    return raw.clamp(1, GvlCommentsList.maxPageSize);
+  }
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
+
+    _ownsScrollController = widget.scrollController == null;
+    _scrollController = widget.scrollController ?? ScrollController();
+
     _primeAndLoad();
   }
 
   @override
   void didUpdateWidget(covariant GvlCommentsList oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Keep the scroll controller consistent with the widget.
+    // If the host swaps controllers, we must stop using the old one.
+    if (oldWidget.scrollController != widget.scrollController) {
+      if (_ownsScrollController) {
+        _scrollController.dispose();
+      }
+      _ownsScrollController = widget.scrollController == null;
+      _scrollController = widget.scrollController ?? ScrollController();
+    }
+
     if (oldWidget.user.id != widget.user.id) {
       CommentsKit.I().invalidateToken();
       _resetPagination();
@@ -137,14 +216,37 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   Future<void> _primeAndLoad() async {
     final kit = CommentsKit.I();
 
-    // Synchronize the profile based on the current JWT.
+    // 1) Best-effort identify.
+    // If auth is blocked (e.g. invalid_binding cooldown), stop the pipeline early
+    // so we don't spam additional endpoints and we surface a single, clear error.
     try {
       await kit.identify(widget.user);
     } catch (e) {
-      debugPrint('gvl_comments: error during identify(): $e');
+      // Normalize expected auth failures (wrong key, invalid binding, cooldown).
+      if (e is CommentsAuthException) {
+        final code = e.code;
+        final isBlocked =
+            code == 'invalid_binding' || code == 'invalid_api_key' || code == 'auth_blocked';
+
+        if (isBlocked && mounted) {
+          debugPrint('gvl_comments: auth blocked ($code) — skipping settings + comments load');
+          setState(() {
+            _loading = false;
+            _error = e.message; // keep UI clean (no stack traces / raw json)
+          });
+          return;
+        }
+
+        // Non-blocking auth errors: log and continue best-effort.
+        debugPrint('gvl_comments: identify() failed (non-fatal) ($code): ${e.message}');
+      } else {
+        // Unknown error type.
+        debugPrint('gvl_comments: error during identify(): $e');
+      }
     }
 
-    // Fetch moderation settings (best-effort).
+    // 2) Fetch moderation settings (best-effort).
+    // If auth is blocked, step (1) returned early.
     try {
       final settings = await kit.getModerationSettings(user: widget.user);
       if (mounted) {
@@ -153,10 +255,17 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         });
       }
     } catch (e) {
-      debugPrint('gvl_comments: error while loading moderation settings: $e');
+      // Moderation settings are non-critical; avoid noisy logs for auth failures.
+      if (e is CommentsAuthException) {
+        debugPrint(
+            'gvl_comments: moderation settings unavailable (${e.code}) — keeping defaults');
+      } else {
+        debugPrint('gvl_comments: error while loading moderation settings: $e');
+      }
       // On error, we keep the default = true (reports enabled).
     }
 
+    // 3) Load comments.
     await _load();
   }
 
@@ -170,7 +279,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       final list = await kit.listByThreadKey(
         widget.threadKey,
         user: widget.user,
-        limit: widget.limit,
+        limit: _effectiveLimit,
         cursor: null,
       );
 
@@ -185,7 +294,11 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        if (e is CommentsAuthException) {
+          _error = e.message;
+        } else {
+          _error = e.toString();
+        }
         _loading = false;
       });
     }
@@ -204,7 +317,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       final list = await kit.listByThreadKey(
         widget.threadKey,
         user: widget.user,
-        limit: widget.limit,
+        limit: _effectiveLimit,
         cursor: _nextCursor,
       );
 
@@ -220,10 +333,49 @@ class _GvlCommentsListState extends State<GvlCommentsList>
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        if (e is CommentsAuthException) {
+          _error = e.message;
+        } else {
+          _error = e.toString();
+        }
         _loadingMore = false;
       });
     }
+
+  }
+
+  /// Scrolls to the most relevant edge after the user posts a comment.
+  ///
+  /// - When `newestAtBottom=true`, new comments are displayed at the bottom
+  ///   (oldest -> newest), so we scroll to the bottom.
+  /// - When `newestAtBottom=false`, new comments are displayed at the top
+  ///   (newest -> oldest), so we scroll to the top.
+  ///
+  /// This is best-effort: if the list is not attached yet, we simply skip.
+  void _scrollToPostedComment() {
+    // Run after the current frame so that the new item has a layout.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_scrollController.hasClients) return;
+
+      final position = _scrollController.position;
+      final targetOffset = widget.newestAtBottom ? position.maxScrollExtent : 0.0;
+
+      // If the scroll extent is not ready (rare on some platforms), fall back to jump.
+      try {
+        _scrollController.animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      } catch (_) {
+        // Animation can throw if called during certain transient layout states.
+        // Jumping is safe and keeps the UX predictable.
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(targetOffset);
+        }
+      }
+    });
   }
 
   Future<void> _send() async {
@@ -254,13 +406,14 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     setState(() {
       _pendingIds.add(tempId);
       _recentlyCreatedCommentIds.add(tempId);
-      if (widget.newestAtBottom) {
-        _comments = [...(_comments ?? []), pending];
-      } else {
-        _comments = [pending, ...(_comments ?? [])];
-      }
+      // Keep internal order newest-first so pagination (older pages appended)
+      // stays consistent, regardless of UI ordering.
+      _comments = [pending, ...(_comments ?? [])];
       _ctrl.clear();
     });
+
+    // Keep the freshly posted comment in view.
+    _scrollToPostedComment();
 
     try {
       final kit = CommentsKit.I();
@@ -400,6 +553,9 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   @override
   void dispose() {
     _ctrl.dispose();
+    if (_ownsScrollController) {
+      _scrollController.dispose();
+    }
     super.dispose();
   }
 
@@ -436,32 +592,19 @@ class _GvlCommentsListState extends State<GvlCommentsList>
     }
 
     if (_error != null && (_comments == null || _comments!.isEmpty)) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _error!,
-              style: t.errorStyle ??
-                  TextStyle(
-                    color: t.errorColor ?? Theme.of(context).colorScheme.error,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            IconButton.outlined(
-              tooltip: l10n?.retryTooltip,
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
+      return CommentsErrorView(
+        error: _error!, // idéalement garde _error en Object plutôt que String
+        onRetry: _load,
+        threadKey: widget.threadKey,
       );
     }
 
     // All comments returned by the API are safe to render.
     // Server-side RLS / views already hide hard-deleted comments.
-    final comments = _comments ?? [];
+    final rawComments = _comments ?? <CommentModel>[];
+    final comments = widget.newestAtBottom
+        ? rawComments.reversed.toList(growable: false) // oldest -> newest
+        : rawComments;
 
     final padding =
         widget.padding ?? EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
@@ -475,23 +618,43 @@ class _GvlCommentsListState extends State<GvlCommentsList>
         children: [
           Expanded(
             child: ListView.separated(
-              controller: widget.scrollController,
-              reverse: widget.newestAtBottom,
+              controller: _scrollController,
+              reverse: false,
               padding: padding,
               itemCount: itemCount,
               separatorBuilder: (ctx, index) {
-                // Do not put separator between last comment and "load more" row.
-                if (hasMoreRow && index == comments.length - 1) {
-                  return const SizedBox.shrink();
+                // Do not put a separator adjacent to the "load more" row.
+                if (hasMoreRow) {
+                  // When newestAtBottom=true, the load more row should be at the top (index 0).
+                  if (widget.newestAtBottom && index == 0) {
+                    return const SizedBox.shrink();
+                  }
+                  // When newestAtBottom=false, the load more row is at the bottom (after last comment).
+                  if (!widget.newestAtBottom && index == comments.length - 1) {
+                    return const SizedBox.shrink();
+                  }
                 }
                 return _buildSeparator(ctx);
               },
               itemBuilder: (ctx, i) {
-                if (hasMoreRow && i == comments.length) {
-                  return _buildLoadMoreRow(ctx);
+                // Load-more row position depends on ordering.
+                // - newestAtBottom=true  => oldest at top => "load previous" belongs at the top.
+                // - newestAtBottom=false => newest at top => "load previous" belongs at the bottom.
+                if (hasMoreRow) {
+                  if (widget.newestAtBottom && i == 0) {
+                    return _buildLoadMoreRow(ctx);
+                  }
+                  if (!widget.newestAtBottom && i == comments.length) {
+                    return _buildLoadMoreRow(ctx);
+                  }
                 }
 
-                final c = comments[i];
+                // Map list index to comment index.
+                final commentIndex = (hasMoreRow && widget.newestAtBottom)
+                    ? i - 1
+                    : i;
+
+                final c = comments[commentIndex];
                 final isMine = c.externalUserId == widget.user.id;
 
                 // Build the raw comment item.
@@ -500,7 +663,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
                   baseItem = widget.commentItemBuilder!(
                     ctx,
                     c,
-                    GvlCommentMeta(
+                    CommentMeta(
                       isMine: isMine,
                       isSending: _pendingIds.contains(c.id),
                     ),
@@ -1053,6 +1216,7 @@ class _InitialsAvatar extends StatelessWidget {
 ///
 /// Indicates whether the comment belongs to the current user and exposes basic
 /// interaction callbacks that can be forwarded to custom widgets.
+@Deprecated('Use CommentMeta (alias) or CommentsList builder signatures instead.')
 class GvlCommentMeta {
   /// Whether the comment was authored by the active user.
   final bool isMine;
@@ -1079,7 +1243,7 @@ class GvlCommentMeta {
 typedef CommentItemBuilder = Widget Function(
   BuildContext context,
   CommentModel comment,
-  GvlCommentMeta meta,
+  CommentMeta meta,
 );
 
 /// Signature for building separators between list items.

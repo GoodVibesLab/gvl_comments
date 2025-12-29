@@ -17,5 +17,14 @@
   "timeXHours": "{h}h ago",
   "timeYesterday": "Yesterday",
   "timeXDays": "{d} days ago",
-  "timeFallbackDate": "On {y}-{m}-{d}"
+  "timeFallbackDate": "{y}-{m}-{d}",
+  "errorTitle": "Error",
+  "retryLabel": "Retry",
+  "genericErrorLabel": "Something went wrong.",
+  "networkErrorLabel": "Network error. Check your connection and try again.",
+  "unauthorizedErrorLabel": "Authentication error. Please sign in again.",
+  "timeoutErrorLabel": "Request timed out. Please try again.",
+  "detailsLabel": "Details",
+  "copyLabel": "Copy",
+  "copiedLabel": "Copied"
 }

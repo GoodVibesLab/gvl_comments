@@ -103,11 +103,11 @@ class _DemoHomeState extends State<DemoHome> {
           ),
         ],
       ),
-      body: GvlCommentsList(
+      body: CommentsList(
         threadKey: 'demo:flutter.comments.v1',
-        newestAtBottom: false,
         limit: 10,
         user: _user,
+        newestAtBottom: true,
         theme: theme,
       ),
     );

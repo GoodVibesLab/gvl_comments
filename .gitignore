@@ -1,4 +1,39 @@
+# Dart / Flutter
 .dart_tool/
 .packages
+.pub/
 build/
-.pub-cache/
+coverage/
+doc/api/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages.generated
+pubspec.lock
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# macOS
+.DS_Store
+
+# Android (generated / local)
+**/local.properties
+**/.gradle/
+**/captures/
+**/.cxx/
+**/*.keystore
+**/*.jks
+
+# iOS (generated)
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/*.xcuserdatad/
+**/*.xcuserdata/
+**/DerivedData/

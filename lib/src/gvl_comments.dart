@@ -6,12 +6,47 @@ import 'api_client.dart';
 import 'models.dart' hide CommentsConfig;
 import 'token_store.dart';
 import 'comments_config.dart';
+import 'utils/comments_logger.dart';
+
+/// Typed auth error thrown by the SDK when authentication cannot proceed.
+///
+/// This is intentionally lightweight and stable so client apps can branch on
+/// [code] (e.g. show a dedicated install-key / binding screen).
+class CommentsAuthException implements Exception {
+  CommentsAuthException(this.code, {this.requestId, this.message});
+
+  /// Stable machine-readable error code (e.g. `invalid_binding`).
+  final String code;
+
+  /// Optional correlation id returned by the API.
+  final String? requestId;
+
+  /// Optional human-readable message (safe to display).
+  final String? message;
+
+  @override
+  String toString() {
+    final rid = requestId != null ? ', request_id=$requestId' : '';
+    final msg = message != null ? ', message=$message' : '';
+    return 'CommentsAuthException(code=$code$rid$msg)';
+  }
+}
 
 /// High-level entry point for interacting with GoodVibesLab comments.
 ///
 /// Use [initialize] once during app startup, then access the singleton via
 /// [CommentsKit.I]. All network operations are routed through this instance.
 class CommentsKit {
+  /// Default number of comments fetched per page when no limit is specified.
+  ///
+  /// Tuned for mobile-first UX and fast first paint.
+  static const int defaultPageSize = 30;
+
+  /// Hard upper bound for comments pagination.
+  ///
+  /// This protects client apps from accidental over-fetching that could lead
+  /// to performance issues or excessive memory usage.
+  static const int maxPageSize = 100;
   static CommentsKit? _instance;
 
   /// Returns the previously initialized singleton instance.
@@ -33,26 +68,12 @@ class CommentsKit {
   final ApiClient _http;
   final TokenStore _tokens = TokenStore();
 
-  ModerationSettings? _cachedSettings;
+  Future<String>? _authInFlight;
+  DateTime? _invalidBindingUntil;
 
   CommentsKit._(this._config, this._http);
 
-  // ===== Logging (debug-only) =====
-
-  static const String _logPrefix = 'gvl_comments:';
-
-  static void _log(String message) {
-    if (kReleaseMode) return;
-    // ignore: avoid_print
-    debugPrint('$_logPrefix $message');
-  }
-
-  static void _logError(String message, [Object? error]) {
-    if (kReleaseMode) return;
-    // ignore: avoid_print
-    debugPrint(
-        '$_logPrefix ERROR – $message${error != null ? " ($error)" : ""}');
-  }
+  // ===== Logging helpers =====
 
   static String _safeKeyPrefix(String key) {
     final k = key.trim();
@@ -66,6 +87,22 @@ class CommentsKit {
     if (u.isEmpty) return '(empty)';
     if (u.length <= 6) return u;
     return '${u.substring(0, 3)}…${u.substring(u.length - 2)}';
+  }
+
+  static String _redactedTokenHeadersForLogs(Map<String, String> headers) {
+    // Avoid printing full device/app binding proofs unless explicitly in TRACE.
+    if (CommentsLogger.level.index >= CommentsLogLevel.trace.index) {
+      return headers.toString();
+    }
+
+    final redacted = Map<String, String>.from(headers);
+    if (redacted.containsKey('x-android-sha256')) {
+      redacted['x-android-sha256'] = '***';
+    }
+    if (redacted.containsKey('x-ios-team-id')) {
+      redacted['x-ios-team-id'] = '***';
+    }
+    return redacted.toString();
   }
 
   /// Current billing plan for this install (e.g. "free", "starter", "pro").
@@ -91,18 +128,21 @@ class CommentsKit {
   static Future<void> initialize({
     required String installKey,
     http.Client? httpClient,
+    CommentsLogLevel? logLevel,
   }) async {
     final trimmedKey = installKey.trim();
+    CommentsLogger.level = logLevel ?? (kReleaseMode ? CommentsLogLevel.error : CommentsLogLevel.debug);
     if (trimmedKey.isEmpty) {
-      _logError(
+      CommentsLogger.error(
         'install key missing. Create one at https://goodvibeslab.cloud and pass it via --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
       );
       throw StateError('GVL install key missing');
     }
     final cfg = await CommentsConfig.detect(installKey: trimmedKey);
     _instance = CommentsKit._(cfg, ApiClient(httpClient: httpClient));
-    _log(
-        'initialized (platform=${cfg.platform}, package=${cfg.packageName}, key=${_safeKeyPrefix(cfg.installKey)})');
+    CommentsLogger.info(
+      'initialized (platform=${cfg.platform}, package=${cfg.packageName}, key=${_safeKeyPrefix(cfg.installKey)})',
+    );
   }
 
   /// Disposes the SDK instance and clears cached tokens.
@@ -113,11 +153,10 @@ class CommentsKit {
 
   /// Clears the cached JWT (for example when the user changes).
   void invalidateToken() {
-    _log('token cache cleared');
+    CommentsLogger.info('token cache cleared');
     lastNextCursor = null;
     lastHasMore = false;
     _tokens.clear();
-    _cachedSettings = null;
   }
 
   // ===== Internal =====
@@ -125,15 +164,28 @@ class CommentsKit {
   Future<String> _getBearer({UserProfile? user}) async {
     final cached = _tokens.validBearer();
     if (cached != null) {
-      _log('auth token cache hit');
+      CommentsLogger.info('auth token cache hit');
       return cached;
     }
 
+    final now = DateTime.now();
+    if (_invalidBindingUntil != null && now.isBefore(_invalidBindingUntil!)) {
+      CommentsLogger.info('auth blocked (invalid_binding cooldown active)');
+      throw CommentsAuthException(
+        'invalid_binding',
+        message: 'This API key requires a valid app binding (signature/origin).',
+      );
+    }
+
+    if (_authInFlight != null) {
+      return _authInFlight!;
+    }
+
+    CommentsLogger.debug('Preparing headers for token request: ${_redactedTokenHeadersForLogs(_config.tokenHeaders())}');
+
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      'x-platform': _config.platform,
-      'x-package-name': _config.packageName,
-      'x-app-version': _config.appVersion,
+      ..._config.tokenHeaders(),
     };
 
     final body = <String, dynamic>{
@@ -146,30 +198,47 @@ class CommentsKit {
         },
     };
 
-    _log('requesting auth token');
+    CommentsLogger.info('requesting auth token');
 
-    Map<String, dynamic> json;
-    try {
-      json = await _http.postJson(
-        _config.apiBase.resolve('token'),
-        body,
-        headers: headers,
-      );
-    } catch (e) {
-      _logError(
-        'failed to obtain auth token. Check your install key at https://goodvibeslab.cloud (key=${_safeKeyPrefix(_config.installKey)})',
-        e,
-      );
-      rethrow;
-    }
+    _authInFlight = () async {
+      try {
+        final json = await _http.postJson(
+          _config.apiBase.resolve('token'),
+          body,
+          headers: headers,
+        );
 
-    final token = json['access_token'] as String;
-    final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
-    final plan = json['plan'] as String?;
-    _tokens.save(token, expiresIn, plan: plan);
-    _log(
-        'auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
-    return token;
+        final token = json['access_token'] as String;
+        final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
+        final plan = json['plan'] as String?;
+        _tokens.save(token, expiresIn, plan: plan);
+        CommentsLogger.info('auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
+        return token;
+      } catch (e) {
+        CommentsLogger.error(
+          'failed to obtain auth token. Check your install key at https://goodvibeslab.cloud '
+          '(key=${_safeKeyPrefix(_config.installKey)}): $e',
+        );
+
+        final msg = e.toString();
+        if (msg.contains('"error":"invalid_binding"') || msg.contains('invalid_binding')) {
+          _invalidBindingUntil = DateTime.now().add(const Duration(seconds: 60));
+          CommentsLogger.info('invalid_binding detected, cooling down for 60s');
+
+          // Throw a stable typed exception so callers can branch without
+          // relying on string parsing.
+          throw CommentsAuthException(
+            'invalid_binding',
+            message: 'This API key requires a valid app binding (signature/origin).',
+          );
+        }
+        rethrow;
+      } finally {
+        _authInFlight = null;
+      }
+    }();
+
+    return _authInFlight!;
   }
 
   // ===== Public SDK =====
@@ -182,9 +251,13 @@ class CommentsKit {
   Future<ModerationSettings> getModerationSettings({
     UserProfile? user,
   }) async {
-    if (_cachedSettings != null) return _cachedSettings!;
-
-    final bearer = await _getBearer(user: user);
+    late final String bearer;
+    try {
+      bearer = await _getBearer(user: user);
+    } catch (_) {
+      CommentsLogger.info('skipping moderation settings load due to auth failure');
+      rethrow;
+    }
 
     final json = await _http.getJson(
       _config.apiBase.resolve('comments/settings'),
@@ -192,7 +265,6 @@ class CommentsKit {
     );
 
     final settings = ModerationSettings.fromJson(json);
-    _cachedSettings = settings;
     return settings;
   }
 
@@ -207,19 +279,23 @@ class CommentsKit {
   Future<List<CommentModel>> listByThreadKey(
     String threadKey, {
     required UserProfile user,
-    int limit = 50,
+    int limit = defaultPageSize,
     String? before,
     String? cursor,
   }) async {
     try {
       final bearer = await _getBearer(user: user);
-      _log(
-          'loading comments (limit=$limit${(cursor != null || before != null) ? ", paginated" : ""})');
+      CommentsLogger.info(
+        'loading comments (limit=${limit.clamp(1, maxPageSize)}${(cursor != null || before != null) ? ", paginated" : ""})',
+      );
+
+      // Clamp limit to a safe range to avoid accidental over-fetching.
+      final effectiveLimit = limit.clamp(1, maxPageSize);
 
       // Build a safe URL using queryParameters (no manual encoding, avoids double-encoding bugs).
       final params = <String, String>{
         'thread': threadKey,
-        'limit': '$limit',
+        'limit': '$effectiveLimit',
         if (cursor != null) 'cursor': cursor,
         if (cursor == null && before != null) 'before': before,
       };
@@ -240,10 +316,16 @@ class CommentsKit {
       final list = await _http.decodeListResponse(res);
       return list.map((e) => CommentModel.fromJson(e)).toList();
     } catch (e, stack) {
+      // Keep auth failures stable and non-noisy.
+      if (e is CommentsAuthException) {
+        CommentsLogger.error('failed to load comments: $e');
+        rethrow;
+      }
+
       if (!kReleaseMode) {
         debugPrintStack(stackTrace: stack);
       }
-      _logError('failed to load comments', e);
+      CommentsLogger.error('failed to load comments: $e');
       throw StateError('Failed to load comments: $e');
     }
   }
@@ -259,7 +341,7 @@ class CommentsKit {
     required String body,
     required UserProfile user,
   }) async {
-    _log('posting comment');
+    CommentsLogger.info('posting comment');
     final bearer = await _getBearer(user: user);
     try {
       final json = await _http.postJson(
@@ -270,10 +352,10 @@ class CommentsKit {
         },
         headers: {'Authorization': 'Bearer $bearer'},
       );
-      _log('comment posted');
+      CommentsLogger.info('comment posted');
       return CommentModel.fromJson(json);
     } catch (e) {
-      _logError('failed to post comment', e);
+      CommentsLogger.error('failed to post comment: $e');
       rethrow;
     }
   }
@@ -288,7 +370,7 @@ class CommentsKit {
     String? reason,
   }) async {
     final bearer = await _getBearer(user: user);
-    _log('reporting comment');
+    CommentsLogger.info('reporting comment');
     Map<String, dynamic> json;
     try {
       json = await _http.postJson(
@@ -299,9 +381,9 @@ class CommentsKit {
         },
         headers: {'Authorization': 'Bearer $bearer'},
       );
-      _log('report sent');
+      CommentsLogger.info('report sent');
     } catch (e) {
-      _logError('failed to report comment', e);
+      CommentsLogger.error('failed to report comment: $e');
       rethrow;
     }
 
@@ -324,7 +406,7 @@ class CommentsKit {
     required String? reaction,
   }) async {
     final bearer = await _getBearer(user: user);
-    _log(
+    CommentsLogger.info(
         'setting reaction comment=$commentId reaction=${reaction ?? "(clear)"}');
 
     try {
@@ -338,7 +420,7 @@ class CommentsKit {
         headers: {'Authorization': 'Bearer $bearer'},
       );
     } catch (e) {
-      _logError('failed to set comment reaction', e);
+      CommentsLogger.error('failed to set comment reaction: $e');
       rethrow;
     }
   }
@@ -349,7 +431,7 @@ class CommentsKit {
   /// avoid disrupting the user experience.
   Future<void> identify(UserProfile user) async {
     try {
-      _log('identify user=${_safeUserId(user.id)}');
+      CommentsLogger.info('identify user=${_safeUserId(user.id)}');
       final bearer = await _getBearer(user: user);
 
       await _http.postJson(
@@ -366,7 +448,7 @@ class CommentsKit {
       if (!kReleaseMode) {
         debugPrintStack(stackTrace: stack);
       }
-      _logError('failed to identify user (non-fatal)', e);
+      CommentsLogger.error('failed to identify user (non-fatal): $e');
       // Best-effort: do not throw.
     }
   }

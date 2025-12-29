@@ -67,6 +67,35 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
 
   @override
   String timeFallbackDate(Object d, Object m, Object y) {
-    return 'On $y-$m-$d';
+    return '$y-$m-$d';
   }
+
+  @override
+  String get errorTitle => 'Error';
+
+  @override
+  String get retryLabel => 'Retry';
+
+  @override
+  String get genericErrorLabel => 'Something went wrong.';
+
+  @override
+  String get networkErrorLabel =>
+      'Network error. Check your connection and try again.';
+
+  @override
+  String get unauthorizedErrorLabel =>
+      'Authentication error. Please sign in again.';
+
+  @override
+  String get timeoutErrorLabel => 'Request timed out. Please try again.';
+
+  @override
+  String get detailsLabel => 'Details';
+
+  @override
+  String get copyLabel => 'Copy';
+
+  @override
+  String get copiedLabel => 'Copied';
 }

@@ -30,3 +30,11 @@ flutter:
 
   assets:
     - assets/gvl_cloud_logo.png
+
+  plugin:
+    platforms:
+      android:
+        package: com.goodvibeslab.gvl_comments
+        pluginClass: GvlCommentsPlugin
+      ios:
+        pluginClass: GvlCommentsPlugin
