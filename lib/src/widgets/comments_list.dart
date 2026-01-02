@@ -266,11 +266,13 @@ class _CommentsListState extends State<CommentsList>
       // Normalize expected auth failures (wrong key, invalid binding, cooldown).
       if (e is CommentsAuthException) {
         final code = e.code;
-        final isBlocked =
-            code == 'invalid_binding' || code == 'invalid_api_key' || code == 'auth_blocked';
+        final isBlocked = code == 'invalid_binding' ||
+            code == 'invalid_api_key' ||
+            code == 'auth_blocked';
 
         if (isBlocked && mounted) {
-          debugPrint('gvl_comments: auth blocked ($code) — skipping settings + comments load');
+          debugPrint(
+              'gvl_comments: auth blocked ($code) — skipping settings + comments load');
           setState(() {
             _loading = false;
             _error = e.message; // keep UI clean (no stack traces / raw json)
@@ -279,7 +281,8 @@ class _CommentsListState extends State<CommentsList>
         }
 
         // Non-blocking auth errors: log and continue best-effort.
-        debugPrint('gvl_comments: identify() failed (non-fatal) ($code): ${e.message}');
+        debugPrint(
+            'gvl_comments: identify() failed (non-fatal) ($code): ${e.message}');
       } else {
         // Unknown error type.
         debugPrint('gvl_comments: error during identify(): $e');
@@ -382,7 +385,6 @@ class _CommentsListState extends State<CommentsList>
         _loadingMore = false;
       });
     }
-
   }
 
   /// Scrolls to the most relevant edge after the user posts a comment.
@@ -400,7 +402,8 @@ class _CommentsListState extends State<CommentsList>
       if (!_scrollController.hasClients) return;
 
       final position = _scrollController.position;
-      final targetOffset = widget.newestAtBottom ? position.maxScrollExtent : 0.0;
+      final targetOffset =
+          widget.newestAtBottom ? position.maxScrollExtent : 0.0;
 
       // If the scroll extent is not ready (rare on some platforms), fall back to jump.
       try {
@@ -691,9 +694,8 @@ class _CommentsListState extends State<CommentsList>
                 }
 
                 // Map list index to comment index.
-                final commentIndex = (hasMoreRow && widget.newestAtBottom)
-                    ? i - 1
-                    : i;
+                final commentIndex =
+                    (hasMoreRow && widget.newestAtBottom) ? i - 1 : i;
 
                 final c = comments[commentIndex];
                 final isMine = c.externalUserId == widget.user.id;
@@ -1105,11 +1107,15 @@ class _DefaultCommentItem extends StatelessWidget {
                     LinkedText(
                       _commentDisplayText(comment, l10n),
                       style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                        fontStyle: comment.isVisibleNormally ? FontStyle.normal : FontStyle.italic,
+                        fontStyle: comment.isVisibleNormally
+                            ? FontStyle.normal
+                            : FontStyle.italic,
                       ),
                       linkStyle: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
                         decoration: TextDecoration.underline,
-                        fontStyle: comment.isVisibleNormally ? FontStyle.normal : FontStyle.italic,
+                        fontStyle: comment.isVisibleNormally
+                            ? FontStyle.normal
+                            : FontStyle.italic,
                       ),
                     )
                     // Removed timestamp from inside bubble

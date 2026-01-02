@@ -44,7 +44,7 @@ class CommentsErrorView extends StatelessWidget {
 
     final spacing = (t.spacing ?? 8) * (compact ? 0.8 : 1.0);
     final titleStyle =
-    (t.errorStyle ?? tt.titleMedium ?? const TextStyle()).copyWith(
+        (t.errorStyle ?? tt.titleMedium ?? const TextStyle()).copyWith(
       fontWeight: FontWeight.w700,
       color: t.errorColor ?? cs.error,
     );
@@ -164,8 +164,7 @@ class CommentsErrorView extends StatelessWidget {
           'Authentication error. Please sign in again.';
     }
     if (info.kind == _ErrorKind.timeout) {
-      return l10n?.timeoutErrorLabel ??
-          'Request timed out. Please try again.';
+      return l10n?.timeoutErrorLabel ?? 'Request timed out. Please try again.';
     }
     // Fallback generic.
     return fallback;
@@ -274,9 +273,9 @@ class _CodePill extends StatelessWidget {
           Text(
             text,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: cs.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(width: 8),
           IconButton(
@@ -331,7 +330,7 @@ class _DetailsPanelState extends State<_DetailsPanel> {
         AnimatedCrossFade(
           duration: const Duration(milliseconds: 180),
           crossFadeState:
-          _open ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              _open ? CrossFadeState.showFirst : CrossFadeState.showSecond,
           firstChild: Container(
             width: double.infinity,
             padding: EdgeInsets.all(widget.compact ? 10 : 12),

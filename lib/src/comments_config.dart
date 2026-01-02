@@ -82,7 +82,8 @@ class CommentsConfig {
     if (!kIsWeb && (platformName == 'android' || platformName == 'ios')) {
       try {
         const channel = MethodChannel('gvl_comments');
-        final map = await channel.invokeMapMethod<String, dynamic>('getInstallBinding');
+        final map =
+            await channel.invokeMapMethod<String, dynamic>('getInstallBinding');
         if (map != null) {
           final pkgFromNative = (map['packageName'] as String?)?.trim();
           final shaFromNative = (map['sha256'] as String?)?.trim();
@@ -137,11 +138,15 @@ extension CommentsConfigTokenHeaders on CommentsConfig {
       'x-app-version': appVersion,
     };
 
-    if (platform == 'android' && androidSha256 != null && androidSha256!.trim().isNotEmpty) {
+    if (platform == 'android' &&
+        androidSha256 != null &&
+        androidSha256!.trim().isNotEmpty) {
       headers['x-android-sha256'] = androidSha256!.trim();
     }
 
-    if (platform == 'ios' && iosTeamId != null && iosTeamId!.trim().isNotEmpty) {
+    if (platform == 'ios' &&
+        iosTeamId != null &&
+        iosTeamId!.trim().isNotEmpty) {
       headers['x-ios-team-id'] = iosTeamId!.trim();
     }
 

@@ -15,15 +15,15 @@ class LinkedText extends StatefulWidget {
   final RegExp? pattern;
 
   const LinkedText(
-      this.text, {
-        super.key,
-        this.style,
-        this.linkStyle,
-        this.textAlign,
-        this.maxLines,
-        this.overflow,
-        this.pattern,
-      });
+    this.text, {
+    super.key,
+    this.style,
+    this.linkStyle,
+    this.textAlign,
+    this.maxLines,
+    this.overflow,
+    this.pattern,
+  });
 
   @override
   State<LinkedText> createState() => _LinkedTextState();
@@ -66,8 +66,7 @@ class _LinkedTextState extends State<LinkedText> {
         }
 
         final raw = match.group(0) ?? '';
-        final recognizer = TapGestureRecognizer()
-          ..onTap = () => _open(raw);
+        final recognizer = TapGestureRecognizer()..onTap = () => _open(raw);
         _recognizers.add(recognizer);
 
         spans.add(

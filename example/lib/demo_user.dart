@@ -43,10 +43,24 @@ Future<UserProfile> regenerateGuestUser() async {
 (String, String) _createGuest() {
   final rnd = Random();
   const animals = [
-    'Falcon', 'Wolf', 'Panther', 'Raven', 'Tiger', 'Cobra', 'Orca', 'Lynx'
+    'Falcon',
+    'Wolf',
+    'Panther',
+    'Raven',
+    'Tiger',
+    'Cobra',
+    'Orca',
+    'Lynx',
   ];
   const adjectives = [
-    'Swift', 'Silent', 'Bold', 'Sharp', 'Calm', 'Fierce', 'Brave', 'Bright'
+    'Swift',
+    'Silent',
+    'Bold',
+    'Sharp',
+    'Calm',
+    'Fierce',
+    'Brave',
+    'Bright',
   ];
 
   final animal = animals[rnd.nextInt(animals.length)];

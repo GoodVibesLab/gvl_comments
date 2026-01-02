@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_client.dart';
-import 'models.dart' hide CommentsConfig;
+import 'models.dart';
 import 'token_store.dart';
 import 'comments_config.dart';
 import 'utils/comments_logger.dart';
@@ -136,7 +136,8 @@ class CommentsKit {
     CommentsLogLevel? logLevel,
   }) async {
     final trimmedKey = installKey.trim();
-    CommentsLogger.level = logLevel ?? (kReleaseMode ? CommentsLogLevel.error : CommentsLogLevel.debug);
+    CommentsLogger.level = logLevel ??
+        (kReleaseMode ? CommentsLogLevel.error : CommentsLogLevel.debug);
     if (trimmedKey.isEmpty) {
       CommentsLogger.error(
         'install key missing. Create one at https://goodvibeslab.cloud and pass it via --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"',
@@ -205,7 +206,8 @@ class CommentsKit {
     final s = v.trim();
 
     // UUID (accept any UUID shape, not only v4)
-    if (RegExp(r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$')
+    if (RegExp(
+            r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$')
         .hasMatch(s)) {
       return true;
     }
@@ -238,13 +240,15 @@ class CommentsKit {
       throw ArgumentError('threadKey is required. See $_threadKeyDocsUrl');
     }
     if (!_isValidThreadKeyFormat(tk)) {
-      CommentsLogger.error('invalid threadKey format: "$tk" (see $_threadKeyDocsUrl)');
+      CommentsLogger.error(
+          'invalid threadKey format: "$tk" (see $_threadKeyDocsUrl)');
       throw ArgumentError(
         'Invalid threadKey format. Allowed: [a-zA-Z0-9:_-.], min length 20. See $_threadKeyDocsUrl',
       );
     }
     if (!_looksHighEntropy(tk)) {
-      CommentsLogger.error('threadKey too guessable: "$tk" (see $_threadKeyDocsUrl)');
+      CommentsLogger.error(
+          'threadKey too guessable: "$tk" (see $_threadKeyDocsUrl)');
       throw ArgumentError(
         'threadKey is too guessable. Use a UUID/ULID/Firestore docId (>=20 chars). See $_threadKeyDocsUrl',
       );
@@ -252,7 +256,8 @@ class CommentsKit {
   }
   // ===== Internal =====
 
-  Future<String> _getBearer({required String threadKey, UserProfile? user}) async {
+  Future<String> _getBearer(
+      {required String threadKey, UserProfile? user}) async {
     final tk = threadKey.trim();
     if (tk.isEmpty) {
       throw StateError('threadKey is required to obtain an auth token');
@@ -275,7 +280,8 @@ class CommentsKit {
       CommentsLogger.info('auth blocked (invalid_binding cooldown active)');
       throw CommentsAuthException(
         'invalid_binding',
-        message: 'This API key requires a valid app binding (signature/origin).',
+        message:
+            'This API key requires a valid app binding (signature/origin).',
       );
     }
 
@@ -283,7 +289,8 @@ class CommentsKit {
       return _authInFlight!;
     }
 
-    CommentsLogger.debug('Preparing headers for token request: ${_redactedTokenHeadersForLogs(_config.tokenHeaders())}');
+    CommentsLogger.debug(
+        'Preparing headers for token request: ${_redactedTokenHeadersForLogs(_config.tokenHeaders())}');
 
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -316,7 +323,8 @@ class CommentsKit {
         final plan = json['plan'] as String?;
         _tokens.save(token, expiresIn, plan: plan);
         _tokenThreadKey = tk;
-        CommentsLogger.info('auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
+        CommentsLogger.info(
+            'auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
         return token;
       } catch (e) {
         CommentsLogger.error(
@@ -325,15 +333,18 @@ class CommentsKit {
         );
 
         final msg = e.toString();
-        if (msg.contains('"error":"invalid_binding"') || msg.contains('invalid_binding')) {
-          _invalidBindingUntil = DateTime.now().add(const Duration(seconds: 60));
+        if (msg.contains('"error":"invalid_binding"') ||
+            msg.contains('invalid_binding')) {
+          _invalidBindingUntil =
+              DateTime.now().add(const Duration(seconds: 60));
           CommentsLogger.info('invalid_binding detected, cooling down for 60s');
 
           // Throw a stable typed exception so callers can branch without
           // relying on string parsing.
           throw CommentsAuthException(
             'invalid_binding',
-            message: 'This API key requires a valid app binding (signature/origin).',
+            message:
+                'This API key requires a valid app binding (signature/origin).',
           );
         }
         rethrow;
@@ -357,9 +368,11 @@ class CommentsKit {
   }) async {
     late final String bearer;
     try {
-      bearer = await _getBearer(threadKey: _metaThreadKey('settings'), user: user);
+      bearer =
+          await _getBearer(threadKey: _metaThreadKey('settings'), user: user);
     } catch (_) {
-      CommentsLogger.info('skipping moderation settings load due to auth failure');
+      CommentsLogger.info(
+          'skipping moderation settings load due to auth failure');
       rethrow;
     }
 
@@ -475,7 +488,8 @@ class CommentsKit {
     required UserProfile user,
     String? reason,
   }) async {
-    final bearer = await _getBearer(threadKey: _metaThreadKey('report', a: commentId), user: user);
+    final bearer = await _getBearer(
+        threadKey: _metaThreadKey('report', a: commentId), user: user);
     CommentsLogger.info('reporting comment');
     Map<String, dynamic> json;
     try {
@@ -511,7 +525,8 @@ class CommentsKit {
     required UserProfile user,
     required String? reaction,
   }) async {
-    final bearer = await _getBearer(threadKey: _metaThreadKey('react', a: commentId), user: user);
+    final bearer = await _getBearer(
+        threadKey: _metaThreadKey('react', a: commentId), user: user);
     CommentsLogger.info(
         'setting reaction comment=$commentId reaction=${reaction ?? "(clear)"}');
 

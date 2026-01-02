@@ -1,30 +1,3 @@
-/// Minimal configuration passed when loading comments for a user.
-///
-/// This model is used by [CommentsKit.listByThreadKey] and [CommentsKit.post]
-/// to authenticate API calls on behalf of the end-user.
-@Deprecated('Legacy config model. Use CommentsKit.initialize(...) instead.')
-class LegacyCommentsConfig {
-  /// Your GoodVibesLab project API key (starts with `cmt_live_`).
-  final String installKey;
-
-  /// A unique ID for the end-user in your app (e.g. user ID, UUID, Firebase ID).
-  final String externalUserId;
-
-  /// Optional display name for this user.
-  final String? externalUserName;
-
-  /// Builds a new configuration object.
-  ///
-  /// * [installKey] is the project key provided by GoodVibesLab.
-  /// * [externalUserId] uniquely identifies the user in your system.
-  /// * [externalUserName] optionally provides a friendly display name.
-  const LegacyCommentsConfig({
-    required this.installKey,
-    required this.externalUserId,
-    this.externalUserName,
-  });
-}
-
 /// Model representing a single comment returned by the Comments API.
 class CommentModel {
   /// Creates an immutable comment model.
@@ -139,7 +112,8 @@ class CommentModel {
       createdAt = DateTime.parse(rawCreatedAt).toUtc();
     } else if (rawCreatedAt is int) {
       // Support epoch millis (best-effort).
-      createdAt = DateTime.fromMillisecondsSinceEpoch(rawCreatedAt, isUtc: true);
+      createdAt =
+          DateTime.fromMillisecondsSinceEpoch(rawCreatedAt, isUtc: true);
     } else {
       // Fallback: avoid crash, use epoch.
       createdAt = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);

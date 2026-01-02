@@ -34,10 +34,7 @@ Future<void> main() async {
 class DemoApp extends StatelessWidget {
   final UserProfile user;
 
-  const DemoApp({
-    super.key,
-    required this.user,
-  });
+  const DemoApp({super.key, required this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -73,10 +70,7 @@ class DemoApp extends StatelessWidget {
 class DemoHome extends StatefulWidget {
   final UserProfile initialUser;
 
-  const DemoHome({
-    super.key,
-    required this.initialUser,
-  });
+  const DemoHome({super.key, required this.initialUser});
 
   @override
   State<DemoHome> createState() => _DemoHomeState();
