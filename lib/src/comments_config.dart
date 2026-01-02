@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show Platform;
+import 'comments_config_io.dart' if (dart.library.html) 'comments_config_stub.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// Runtime configuration detected from the host platform and app metadata.
@@ -37,16 +37,13 @@ class CommentsConfig {
       ),
     );
 
-    String platform;
-    if (kIsWeb) {
-      platform = 'web';
-    } else if (Platform.isAndroid) {
-      platform = 'android';
-    } else if (Platform.isIOS) {
-      platform = 'ios';
-    } else {
-      platform = 'unknown';
-    }
+    String platformName;
+    platformName = switch (kIsWeb) {
+      true => 'web',
+      false when platform.isAndroid => 'android',
+      false when platform.isIOS => 'ios',
+      _ => 'unknown',
+    };
 
     String pkg = 'unknown';
     String ver = '0.0.0';
@@ -59,7 +56,7 @@ class CommentsConfig {
     return CommentsConfig._(
       installKey: installKey,
       apiBase: apiBase,
-      platform: platform,
+      platform: platformName,
       packageName: pkg,
       appVersion: ver,
     );
