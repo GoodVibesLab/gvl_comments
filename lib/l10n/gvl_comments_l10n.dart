@@ -199,8 +199,62 @@ abstract class GvlCommentsL10n {
   /// No description provided for @timeFallbackDate.
   ///
   /// In en, this message translates to:
-  /// **'On {y}-{m}-{d}'**
+  /// **'{y}-{m}-{d}'**
   String timeFallbackDate(Object d, Object m, Object y);
+
+  /// No description provided for @errorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get errorTitle;
+
+  /// No description provided for @retryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retryLabel;
+
+  /// No description provided for @genericErrorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong.'**
+  String get genericErrorLabel;
+
+  /// No description provided for @networkErrorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error. Check your connection and try again.'**
+  String get networkErrorLabel;
+
+  /// No description provided for @unauthorizedErrorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication error. Please sign in again.'**
+  String get unauthorizedErrorLabel;
+
+  /// No description provided for @timeoutErrorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Request timed out. Please try again.'**
+  String get timeoutErrorLabel;
+
+  /// No description provided for @detailsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get detailsLabel;
+
+  /// No description provided for @copyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get copyLabel;
+
+  /// No description provided for @copiedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get copiedLabel;
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {

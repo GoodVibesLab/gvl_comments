@@ -2,6 +2,24 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 0.9.6
+
+### Added
+- Optional **strict install key binding** for enhanced security:
+    - Android: app signing certificate **SHA-256**
+    - iOS: **Team ID**
+- Clear authentication errors when strict binding is enabled and the app signature does not match.
+- New production-grade error UI for comments (retry, debug code, optional details panel).
+
+### Improved
+- Comments SDK initialization and configuration flow.
+- Internal logging and error handling for easier debugging in production.
+- Android plugin configuration for wider consumer compatibility.
+
+### Internal
+- Plugin scaffold cleanup and release-ready project structure.
+- iOS podspec metadata updated and privacy manifest included.
+
 ## 0.9.5
 - Added comment reactions (like, love, etc.) with optimistic UI
 - Improved visual polish and interaction feedback

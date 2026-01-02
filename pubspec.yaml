@@ -1,12 +1,13 @@
 name: gvl_comments
-description: Production-ready comments UI for Flutter apps, powered by GoodVibesLab Comments Cloud.
-version: 0.9.5
+description: Add a comments section to any Flutter app (UI + managed backend). No Firebase/Supabase setup—just an install key.
+version: 0.9.6
 homepage: https://goodvibeslab.cloud
 repository: https://github.com/GoodVibesLab/gvl_comments
 issue_tracker: https://github.com/GoodVibesLab/gvl_comments/issues
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.10.0"
 
 dependencies:
   flutter:
@@ -27,6 +28,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  
+  plugin:
+    platforms:
+      android:
+        package: com.goodvibeslab.gvl_comments
+        pluginClass: GvlCommentsPlugin
+      ios:
+        pluginClass: GvlCommentsPlugin
 
   assets:
     - assets/gvl_cloud_logo.png
+

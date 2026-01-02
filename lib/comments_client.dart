@@ -142,9 +142,19 @@ class Comment {
 
 /// Exception thrown when the backend answers with an error payload.
 class CommentsApiException implements Exception {
-  /// Builds an exception with the HTTP status code, a stable error message and
-  /// optional details from the backend response.
-  CommentsApiException(this.statusCode, this.message, {this.details});
+  /// Builds an exception with the HTTP status code and a stable error code.
+  ///
+  /// - [message] is the machine-readable error code (e.g. `invalid_binding`).
+  /// - [humanMessage] is an optional user-facing/server-provided message.
+  /// - [requestId] is an optional correlation id to locate server logs.
+  /// - [details] is optional structured payload (kept for debugging).
+  CommentsApiException(
+    this.statusCode,
+    this.message, {
+    this.humanMessage,
+    this.requestId,
+    this.details,
+  });
 
   /// HTTP status code returned by the API.
   final int statusCode;
@@ -152,12 +162,18 @@ class CommentsApiException implements Exception {
   /// Machine-readable error message (for example `invalid_token_response`).
   final String message;
 
+  /// Optional human-readable message returned by the backend.
+  final String? humanMessage;
+
+  /// Optional correlation id returned by the backend.
+  final String? requestId;
+
   /// Additional information returned by the backend when available.
   final Object? details;
 
   @override
   String toString() =>
-      'CommentsApiException(statusCode: $statusCode, message: $message, details: $details)';
+      'CommentsApiException(statusCode: $statusCode, message: $message, humanMessage: $humanMessage, requestId: $requestId, details: $details)';
 }
 
 class _AuthToken {
@@ -374,19 +390,34 @@ class CommentsClient {
   }
 
   CommentsApiException _mapError(http.Response response) {
-    Object? details;
-    String message = 'http_error';
+    String code = 'http_error';
+    String? human;
+    String? requestId;
 
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map<String, dynamic>) {
-        message = decoded['error'] as String? ?? message;
-        details = decoded['details'] ?? decoded['message'];
+        // Stable machine-readable code.
+        code = decoded['error'] as String? ?? code;
+
+        // Human-readable message (safe, intended for clients).
+        human = decoded['message'] as String?;
+
+        // Correlation id for support.
+        requestId = decoded['request_id'] as String?;
       }
     } catch (_) {
-      message = response.reasonPhrase ?? message;
+      // Non-JSON response.
+      human = response.reasonPhrase;
     }
 
-    return CommentsApiException(response.statusCode, message, details: details);
+    return CommentsApiException(
+      response.statusCode,
+      code,
+      humanMessage: human,
+      requestId: requestId,
+      // Do not keep arbitrary server payloads in production SDK.
+      details: null,
+    );
   }
 }

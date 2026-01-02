@@ -1,4 +1,3 @@
-
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -7,7 +6,16 @@ import 'package:gvl_comments/l10n/gvl_comments_l10n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Public demo key for the example app only (bound to example package/bundle).
-const _demoInstallKey = 'cmt_live_EyuFlFVL682oiBVMealY2TfykRvJSDlF4Hbb8G2inhw';
+// You can override it at runtime with:
+//   flutter run --dart-define=GVL_INSTALL_KEY="cmt_live_xxx"
+const String _demoInstallKey = String.fromEnvironment(
+  'GVL_INSTALL_KEY',
+  defaultValue: 'cmt_live_EyuFlFVL682oiBVMealY2TfykRvJSDlF4Hbb8G2inhw',
+);
+
+// Example thread key.
+// IMPORTANT: must be high-entropy in production (avoid guessable values like "post:123").
+const String _demoThreadKey = 'demo:flutter.comments:5YqL4w8bQm9ZkF3R7sN2D';
 
 /// Stable guest identity stored on the device/emulator.
 const _kGuestIdKey = 'gvl_demo_guest_id';
@@ -52,6 +60,7 @@ class DemoApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
+      themeMode: ThemeMode.dark,
       home: Builder(
         // IMPORTANT: this context is below MaterialApp, so Theme.of(context)
         // is the one we configured above.
@@ -103,11 +112,11 @@ class _DemoHomeState extends State<DemoHome> {
           ),
         ],
       ),
-      body: GvlCommentsList(
-        threadKey: 'demo:flutter.comments.v1',
-        newestAtBottom: false,
+      body: CommentsList(
+        threadKey: _demoThreadKey,
         limit: 10,
         user: _user,
+        newestAtBottom: true,
         theme: theme,
       ),
     );

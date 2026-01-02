@@ -2,7 +2,8 @@
 ///
 /// This model is used by [CommentsKit.listByThreadKey] and [CommentsKit.post]
 /// to authenticate API calls on behalf of the end-user.
-class CommentsConfig {
+@Deprecated('Legacy config model. Use CommentsKit.initialize(...) instead.')
+class LegacyCommentsConfig {
   /// Your GoodVibesLab project API key (starts with `cmt_live_`).
   final String installKey;
 
@@ -17,7 +18,7 @@ class CommentsConfig {
   /// * [installKey] is the project key provided by GoodVibesLab.
   /// * [externalUserId] uniquely identifies the user in your system.
   /// * [externalUserName] optionally provides a friendly display name.
-  const CommentsConfig({
+  const LegacyCommentsConfig({
     required this.installKey,
     required this.externalUserId,
     this.externalUserName,
