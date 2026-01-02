@@ -37,6 +37,8 @@ class CommentsAuthException implements Exception {
 /// Use [initialize] once during app startup, then access the singleton via
 /// [CommentsKit.I]. All network operations are routed through this instance.
 class CommentsKit {
+  static const String _threadKeyDocsUrl = 'https://www.goodvibeslab.cloud/docs';
+
   /// Default number of comments fetched per page when no limit is specified.
   ///
   /// Tuned for mobile-first UX and fast first paint.
@@ -70,6 +72,9 @@ class CommentsKit {
 
   Future<String>? _authInFlight;
   DateTime? _invalidBindingUntil;
+
+  /// The threadKey the current cached token is scoped to (server-enforced in prod).
+  String? _tokenThreadKey;
 
   CommentsKit._(this._config, this._http);
 
@@ -157,15 +162,112 @@ class CommentsKit {
     lastNextCursor = null;
     lastHasMore = false;
     _tokens.clear();
+    _tokenThreadKey = null;
   }
 
+  String _metaThreadKey(String purpose, {String? a, String? b}) {
+    String clean(String s) => s.replaceAll(RegExp(r'[^a-zA-Z0-9:_\-\.]'), '');
+
+    final p = clean(purpose);
+    final aa = clean(a ?? '');
+    final bb = clean(b ?? '');
+
+    // installKey is already high-entropy; sanitize and ensure minimum length.
+    final rawKey = clean(_config.installKey);
+    final padded = rawKey.padRight(20, '0');
+    final n = padded.length.clamp(20, 32);
+    final keyPart = padded.substring(0, n);
+
+    final base = 'meta:$p:$keyPart';
+    if (aa.isEmpty && bb.isEmpty) return base;
+    if (bb.isEmpty) return '$base:$aa';
+    return '$base:$aa:$bb';
+  }
+
+  // ===== threadKey validation (strict) =====
+
+  /// Strict production rule: threadKey must be high-entropy (UUID/ULID/Firestore docId).
+  ///
+  /// Rationale: prevents guessable thread ids like `post-123` which make scraping/spam cheap.
+  ///
+  /// Format constraints:
+  /// - Allowed chars: [a-zA-Z0-9:_-.]
+  /// - Minimum length: 20
+  ///
+  /// See docs: https://www.goodvibeslab.cloud/docs
+  static bool _isValidThreadKeyFormat(String v) {
+    final s = v.trim();
+    if (s.length < 20) return false;
+    return RegExp(r'^[a-zA-Z0-9:_\-\.]+$').hasMatch(s);
+  }
+
+  static bool _looksHighEntropy(String v) {
+    final s = v.trim();
+
+    // UUID (accept any UUID shape, not only v4)
+    if (RegExp(r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$')
+        .hasMatch(s)) {
+      return true;
+    }
+
+    // ULID (26 Crockford base32)
+    if (RegExp(r'^[0-9A-HJKMNP-TV-Z]{26}$').hasMatch(s)) {
+      return true;
+    }
+
+    // Generic heuristic: require at least 2 character classes among lower/upper/digit.
+    // This rejects simple slugs like `post-123` even if long.
+    final hasLower = RegExp(r'[a-z]').hasMatch(s);
+    final hasUpper = RegExp(r'[A-Z]').hasMatch(s);
+    final hasDigit = RegExp(r'[0-9]').hasMatch(s);
+    final categories = [hasLower, hasUpper, hasDigit].where((x) => x).length;
+
+    // Reject obvious guessable patterns.
+    final looksTooSimple = RegExp(
+      r'^(post|article|thread|item|page|news|blog|product|video)[:_\-]?\d+$',
+      caseSensitive: false,
+    ).hasMatch(s);
+
+    return !looksTooSimple && categories >= 2 && s.length >= 20;
+  }
+
+  static void _assertStrictThreadKey(String threadKey) {
+    final tk = threadKey.trim();
+    if (tk.isEmpty) {
+      CommentsLogger.error('invalid threadKey: empty (see $_threadKeyDocsUrl)');
+      throw ArgumentError('threadKey is required. See $_threadKeyDocsUrl');
+    }
+    if (!_isValidThreadKeyFormat(tk)) {
+      CommentsLogger.error('invalid threadKey format: "$tk" (see $_threadKeyDocsUrl)');
+      throw ArgumentError(
+        'Invalid threadKey format. Allowed: [a-zA-Z0-9:_-.], min length 20. See $_threadKeyDocsUrl',
+      );
+    }
+    if (!_looksHighEntropy(tk)) {
+      CommentsLogger.error('threadKey too guessable: "$tk" (see $_threadKeyDocsUrl)');
+      throw ArgumentError(
+        'threadKey is too guessable. Use a UUID/ULID/Firestore docId (>=20 chars). See $_threadKeyDocsUrl',
+      );
+    }
+  }
   // ===== Internal =====
 
-  Future<String> _getBearer({UserProfile? user}) async {
+  Future<String> _getBearer({required String threadKey, UserProfile? user}) async {
+    final tk = threadKey.trim();
+    if (tk.isEmpty) {
+      throw StateError('threadKey is required to obtain an auth token');
+    }
+
     final cached = _tokens.validBearer();
-    if (cached != null) {
+    if (cached != null && _tokenThreadKey == tk) {
       CommentsLogger.info('auth token cache hit');
       return cached;
+    }
+
+    if (cached != null && _tokenThreadKey != tk) {
+      // The token is scoped to a different thread. Clear it and fetch a new one.
+      CommentsLogger.info('auth token scoped to different thread, refreshing');
+      _tokens.clear();
     }
 
     final now = DateTime.now();
@@ -190,6 +292,7 @@ class CommentsKit {
 
     final body = <String, dynamic>{
       'apiKey': _config.installKey,
+      'threadKey': tk,
       if (user != null)
         'externalUser': {
           'id': user.id,
@@ -212,6 +315,7 @@ class CommentsKit {
         final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
         final plan = json['plan'] as String?;
         _tokens.save(token, expiresIn, plan: plan);
+        _tokenThreadKey = tk;
         CommentsLogger.info('auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
         return token;
       } catch (e) {
@@ -253,7 +357,7 @@ class CommentsKit {
   }) async {
     late final String bearer;
     try {
-      bearer = await _getBearer(user: user);
+      bearer = await _getBearer(threadKey: _metaThreadKey('settings'), user: user);
     } catch (_) {
       CommentsLogger.info('skipping moderation settings load due to auth failure');
       rethrow;
@@ -284,7 +388,8 @@ class CommentsKit {
     String? cursor,
   }) async {
     try {
-      final bearer = await _getBearer(user: user);
+      _assertStrictThreadKey(threadKey);
+      final bearer = await _getBearer(threadKey: threadKey, user: user);
       CommentsLogger.info(
         'loading comments (limit=${limit.clamp(1, maxPageSize)}${(cursor != null || before != null) ? ", paginated" : ""})',
       );
@@ -341,8 +446,9 @@ class CommentsKit {
     required String body,
     required UserProfile user,
   }) async {
+    _assertStrictThreadKey(threadKey);
     CommentsLogger.info('posting comment');
-    final bearer = await _getBearer(user: user);
+    final bearer = await _getBearer(threadKey: threadKey, user: user);
     try {
       final json = await _http.postJson(
         _config.apiBase.resolve('comments'),
@@ -369,7 +475,7 @@ class CommentsKit {
     required UserProfile user,
     String? reason,
   }) async {
-    final bearer = await _getBearer(user: user);
+    final bearer = await _getBearer(threadKey: _metaThreadKey('report', a: commentId), user: user);
     CommentsLogger.info('reporting comment');
     Map<String, dynamic> json;
     try {
@@ -405,7 +511,7 @@ class CommentsKit {
     required UserProfile user,
     required String? reaction,
   }) async {
-    final bearer = await _getBearer(user: user);
+    final bearer = await _getBearer(threadKey: _metaThreadKey('react', a: commentId), user: user);
     CommentsLogger.info(
         'setting reaction comment=$commentId reaction=${reaction ?? "(clear)"}');
 
@@ -432,7 +538,17 @@ class CommentsKit {
   Future<void> identify(UserProfile user) async {
     try {
       CommentsLogger.info('identify user=${_safeUserId(user.id)}');
-      final bearer = await _getBearer(user: user);
+
+      // Token is scoped to a specific thread. Avoid forcing a token fetch here,
+      // otherwise identify() would grab a token scoped to a meta thread and
+      // immediately trigger a refresh when loading real comments.
+      final cached = _tokens.validBearer();
+      if (cached == null) {
+        CommentsLogger.debug('identify skipped (no auth token yet)');
+        return;
+      }
+
+      final bearer = cached;
 
       await _http.postJson(
         _config.apiBase.resolve('profile/upsert'),

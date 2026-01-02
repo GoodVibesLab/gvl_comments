@@ -14,43 +14,7 @@ import 'linked_text.dart';
 /// and exposes builder hooks to customize avatars, bubbles, and the composer.
 /// It fetches data through [CommentsKit] and keeps pagination state internally.
 /// Preferred API name (no `Gvl` prefix).
-///
-/// This is a thin wrapper around [GvlCommentsList] to keep backward
-/// compatibility while exposing a cleaner public surface.
-class CommentsList extends GvlCommentsList {
-  const CommentsList({
-    super.key,
-    required super.threadKey,
-    required super.user,
-    super.commentItemBuilder,
-    super.avatarBuilder,
-    super.sendButtonBuilder,
-    super.composerBuilder,
-    super.separatorBuilder,
-    super.limit,
-    super.padding,
-    super.scrollController,
-    super.theme,
-    // Inherits default: feed-like ordering (newestAtBottom = false)
-    super.newestAtBottom,
-    super.reactionsEnabled,
-  });
-}
-
-/// Preferred API name (no `Gvl` prefix).
-typedef CommentMeta = GvlCommentMeta;
-
-/// Preferred API name (no `Gvl` prefix).
-typedef CommentsThemeData = GvlCommentsThemeData;
-
-/// Preferred API name (no `Gvl` prefix).
-typedef CommentsTheme = GvlCommentsTheme;
-
-/// Preferred API name (no `Gvl` prefix).
-typedef CommentsStrings = GvlCommentsStrings;
-
-@Deprecated('Use CommentsList.')
-class GvlCommentsList extends StatefulWidget {
+class CommentsList extends StatefulWidget {
   /// Default number of comments fetched per page.
   ///
   /// Kept intentionally conservative for performance on mobile networks.
@@ -61,7 +25,26 @@ class GvlCommentsList extends StatefulWidget {
   /// This protects both the host app and the backend from accidental large
   /// requests (e.g. `limit: 100000`).
   static const int maxPageSize = 100;
+
   /// Unique identifier for the thread to display.
+  ///
+  /// ## Important (security)
+  /// This value must be **stable** (same post -> same key) and **high-entropy**
+  /// (hard to guess) to reduce enumeration/spam risk.
+  ///
+  /// Recommended:
+  /// - UUID (v4), ULID
+  /// - Firestore / database document IDs
+  /// - Any opaque random identifier you already have for the content
+  ///
+  /// Avoid guessable keys such as:
+  /// - `post-123`, `article-42`, `news:2026-01-02`
+  ///
+  /// ### Format rules (strict mode)
+  /// Allowed characters: `a-zA-Z0-9:_-.`
+  /// - Minimum length: 20
+  ///
+  /// See: https://www.goodvibeslab.cloud/docs
   final String threadKey;
 
   /// Profile of the active user used for authentication and author metadata.
@@ -109,7 +92,7 @@ class GvlCommentsList extends StatefulWidget {
   ///
   /// Provide builder callbacks to customize rendering; otherwise sensible
   /// defaults are used.
-  const GvlCommentsList({
+  const CommentsList({
     super.key,
     required this.threadKey,
     required this.user,
@@ -128,10 +111,68 @@ class GvlCommentsList extends StatefulWidget {
   });
 
   @override
-  State<GvlCommentsList> createState() => _GvlCommentsListState();
+  State<CommentsList> createState() => _CommentsListState();
 }
 
-class _GvlCommentsListState extends State<GvlCommentsList>
+/// Metadata passed to builders to customize rendering.
+///
+/// Indicates whether the comment belongs to the current user and exposes basic
+/// interaction callbacks that can be forwarded to custom widgets.
+@immutable
+class CommentMeta {
+  /// Whether the comment was authored by the active user.
+  final bool isMine;
+
+  /// Whether the comment is currently being sent and not yet confirmed.
+  final bool isSending;
+
+  /// Optional handler for long-press interactions (for example opening a menu).
+  final VoidCallback? onLongPress;
+
+  /// Optional handler for tap interactions.
+  final VoidCallback? onTap;
+
+  /// Creates metadata for a comment item.
+  const CommentMeta({
+    required this.isMine,
+    this.isSending = false,
+    this.onLongPress,
+    this.onTap,
+  });
+}
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsThemeData = GvlCommentsThemeData;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsTheme = GvlCommentsTheme;
+
+/// Preferred API name (no `Gvl` prefix).
+typedef CommentsStrings = GvlCommentsStrings;
+
+/// Backward-compatible name.
+@Deprecated('Use CommentsList.')
+class GvlCommentsList extends CommentsList {
+  const GvlCommentsList({
+    super.key,
+    required super.threadKey,
+    required super.user,
+    super.commentItemBuilder,
+    super.avatarBuilder,
+    super.sendButtonBuilder,
+    super.composerBuilder,
+    super.separatorBuilder,
+    super.limit,
+    super.padding,
+    super.scrollController,
+    super.theme,
+    // Inherits default: feed-like ordering (newestAtBottom = false)
+    super.newestAtBottom,
+    super.reactionsEnabled,
+  });
+}
+
+class _CommentsListState extends State<CommentsList>
     with AutomaticKeepAliveClientMixin {
   List<CommentModel>? _comments;
   String? _error;
@@ -167,7 +208,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   int get _effectiveLimit {
     final raw = widget.limit;
     if (raw <= 0) return 1;
-    return raw.clamp(1, GvlCommentsList.maxPageSize);
+    return raw.clamp(1, CommentsList.maxPageSize);
   }
 
   @override
@@ -184,7 +225,7 @@ class _GvlCommentsListState extends State<GvlCommentsList>
   }
 
   @override
-  void didUpdateWidget(covariant GvlCommentsList oldWidget) {
+  void didUpdateWidget(covariant CommentsList oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     // Keep the scroll controller consistent with the widget.
@@ -1212,30 +1253,13 @@ class _InitialsAvatar extends StatelessWidget {
   }
 }
 
-/// Metadata passed to builders to customize rendering.
-///
-/// Indicates whether the comment belongs to the current user and exposes basic
-/// interaction callbacks that can be forwarded to custom widgets.
-@Deprecated('Use CommentMeta (alias) or CommentsList builder signatures instead.')
-class GvlCommentMeta {
-  /// Whether the comment was authored by the active user.
-  final bool isMine;
-
-  /// Whether the comment is currently being sent and not yet confirmed.
-  final bool isSending;
-
-  /// Optional handler for long-press interactions (for example opening a menu).
-  final VoidCallback? onLongPress;
-
-  /// Optional handler for tap interactions.
-  final VoidCallback? onTap;
-
-  /// Creates metadata for a comment item.
+@Deprecated('Use CommentMeta.')
+class GvlCommentMeta extends CommentMeta {
   const GvlCommentMeta({
-    required this.isMine,
-    this.isSending = false,
-    this.onLongPress,
-    this.onTap,
+    required super.isMine,
+    super.isSending = false,
+    super.onLongPress,
+    super.onTap,
   });
 }
 
