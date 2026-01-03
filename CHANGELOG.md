@@ -2,6 +2,12 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 0.9.7
+
+### Fixed
+- Hardened user identification flow
+
+
 ## 0.9.6
 
 ### Security

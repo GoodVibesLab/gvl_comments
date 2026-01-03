@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../l10n/gvl_comments_l10n.dart';
@@ -257,39 +259,7 @@ class _CommentsListState extends State<CommentsList>
   Future<void> _primeAndLoad() async {
     final kit = CommentsKit.I();
 
-    // 1) Best-effort identify.
-    // If auth is blocked (e.g. invalid_binding cooldown), stop the pipeline early
-    // so we don't spam additional endpoints and we surface a single, clear error.
-    try {
-      await kit.identify(widget.user);
-    } catch (e) {
-      // Normalize expected auth failures (wrong key, invalid binding, cooldown).
-      if (e is CommentsAuthException) {
-        final code = e.code;
-        final isBlocked = code == 'invalid_binding' ||
-            code == 'invalid_api_key' ||
-            code == 'auth_blocked';
-
-        if (isBlocked && mounted) {
-          debugPrint(
-              'gvl_comments: auth blocked ($code) — skipping settings + comments load');
-          setState(() {
-            _loading = false;
-            _error = e.message; // keep UI clean (no stack traces / raw json)
-          });
-          return;
-        }
-
-        // Non-blocking auth errors: log and continue best-effort.
-        debugPrint(
-            'gvl_comments: identify() failed (non-fatal) ($code): ${e.message}');
-      } else {
-        // Unknown error type.
-        debugPrint('gvl_comments: error during identify(): $e');
-      }
-    }
-
-    // 2) Fetch moderation settings (best-effort).
+    // 1) Fetch moderation settings (best-effort).
     // If auth is blocked, step (1) returned early.
     try {
       final settings = await kit.getModerationSettings(user: widget.user);
@@ -308,6 +278,11 @@ class _CommentsListState extends State<CommentsList>
       }
       // On error, we keep the default = true (reports enabled).
     }
+
+    // 2) Best-effort identify.
+    // If auth is blocked (e.g. invalid_binding cooldown), stop the pipeline early
+    // so we don't spam additional endpoints and we surface a single, clear error.
+    unawaited(kit.identify(widget.user));
 
     // 3) Load comments.
     await _load();

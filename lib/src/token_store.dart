@@ -19,7 +19,7 @@ class TokenStore {
 
   String? get plan => _plan;
 
-  Future<void> clear() async {
+  void clear() {
     _token = null;
     _exp = null;
     _plan = null;

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -68,13 +70,32 @@ class CommentsKit {
 
   final CommentsConfig _config;
   final ApiClient _http;
-  final TokenStore _tokens = TokenStore();
+
+  late final String _installKeyHash12 =
+      sha256.convert(utf8.encode(_config.installKey)).toString().substring(0, 12);
+
+  /// Thread-scoped bearer token (used for list/post on a real thread).
+  final TokenStore _threadTokens = TokenStore();
+
+  /// Meta-scoped bearer token (used for identify/settings/report/react).
+  ///
+  /// Keeping this separate prevents "token scoped to different thread" churn
+  /// when meta calls happen before/after opening a real thread.
+  final TokenStore _metaTokens = TokenStore();
 
   Future<String>? _authInFlight;
+  Future<String>? _metaAuthInFlight;
   DateTime? _invalidBindingUntil;
 
-  /// The threadKey the current cached token is scoped to (server-enforced in prod).
+  /// The threadKey the current cached *thread* token is scoped to (server-enforced in prod).
   String? _tokenThreadKey;
+
+  /// Latest user passed to identify() when no token was available yet.
+  /// Will be replayed automatically after a successful token acquisition.
+  UserProfile? _pendingIdentifyUser;
+
+  /// Prevent concurrent identify flushes.
+  Future<void>? _identifyInFlight;
 
   CommentsKit._(this._config, this._http);
 
@@ -112,10 +133,9 @@ class CommentsKit {
 
   /// Current billing plan for this install (e.g. "free", "starter", "pro").
   ///
-  /// The value is populated from the last successful `/token` call and cached
-  /// in memory alongside the access token. It becomes `null` again when
-  /// [invalidateToken] is called.
-  String? get currentPlan => _tokens.plan;
+  /// Prefer the thread-scoped plan when available, otherwise fall back to the
+  /// meta-scoped plan.
+  String? get currentPlan => _threadTokens.plan ?? _metaTokens.plan;
 
   /// Last pagination cursor returned by the API (opaque).
   ///
@@ -162,8 +182,15 @@ class CommentsKit {
     CommentsLogger.info('token cache cleared');
     lastNextCursor = null;
     lastHasMore = false;
-    _tokens.clear();
+
+    // Clear both caches: thread + meta.
+    _threadTokens.clear();
+    _metaTokens.clear();
+
     _tokenThreadKey = null;
+
+    // Intentionally keep _pendingIdentifyUser so a profile update can be
+    // replayed once a token is obtained again.
   }
 
   String _metaThreadKey(String purpose, {String? a, String? b}) {
@@ -173,13 +200,7 @@ class CommentsKit {
     final aa = clean(a ?? '');
     final bb = clean(b ?? '');
 
-    // installKey is already high-entropy; sanitize and ensure minimum length.
-    final rawKey = clean(_config.installKey);
-    final padded = rawKey.padRight(20, '0');
-    final n = padded.length.clamp(20, 32);
-    final keyPart = padded.substring(0, n);
-
-    final base = 'meta:$p:$keyPart';
+    final base = 'meta:$p:$_installKeyHash12';
     if (aa.isEmpty && bb.isEmpty) return base;
     if (bb.isEmpty) return '$base:$aa';
     return '$base:$aa:$bb';
@@ -263,7 +284,7 @@ class CommentsKit {
       throw StateError('threadKey is required to obtain an auth token');
     }
 
-    final cached = _tokens.validBearer();
+    final cached = _threadTokens.validBearer();
     if (cached != null && _tokenThreadKey == tk) {
       CommentsLogger.info('auth token cache hit');
       return cached;
@@ -272,7 +293,7 @@ class CommentsKit {
     if (cached != null && _tokenThreadKey != tk) {
       // The token is scoped to a different thread. Clear it and fetch a new one.
       CommentsLogger.info('auth token scoped to different thread, refreshing');
-      _tokens.clear();
+      _threadTokens.clear();
     }
 
     final now = DateTime.now();
@@ -321,10 +342,14 @@ class CommentsKit {
         final token = json['access_token'] as String;
         final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
         final plan = json['plan'] as String?;
-        _tokens.save(token, expiresIn, plan: plan);
+        _threadTokens.save(token, expiresIn, plan: plan);
         _tokenThreadKey = tk;
         CommentsLogger.info(
             'auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
+
+        // Replay pending identify in the background (best-effort).
+        _flushPendingIdentifyIfAny().ignore();
+
         return token;
       } catch (e) {
         CommentsLogger.error(
@@ -368,8 +393,7 @@ class CommentsKit {
   }) async {
     late final String bearer;
     try {
-      bearer =
-          await _getBearer(threadKey: _metaThreadKey('settings'), user: user);
+      bearer = await _getMetaBearer(purpose: 'settings', user: user);
     } catch (_) {
       CommentsLogger.info(
           'skipping moderation settings load due to auth failure');
@@ -488,8 +512,7 @@ class CommentsKit {
     required UserProfile user,
     String? reason,
   }) async {
-    final bearer = await _getBearer(
-        threadKey: _metaThreadKey('report', a: commentId), user: user);
+    final bearer = await _getMetaBearer(purpose: 'report', user: user);
     CommentsLogger.info('reporting comment');
     Map<String, dynamic> json;
     try {
@@ -525,8 +548,7 @@ class CommentsKit {
     required UserProfile user,
     required String? reaction,
   }) async {
-    final bearer = await _getBearer(
-        threadKey: _metaThreadKey('react', a: commentId), user: user);
+    final bearer = await _getMetaBearer(purpose: 'react', user: user);
     CommentsLogger.info(
         'setting reaction comment=$commentId reaction=${reaction ?? "(clear)"}');
 
@@ -546,41 +568,177 @@ class CommentsKit {
     }
   }
 
-  /// Best-effort profile sync (name / avatar) based on the JWT.
+  /// Best-effort profile sync (name / avatar).
   ///
-  /// The call is intentionally resilient: errors are logged but not thrown to
-  /// avoid disrupting the user experience.
+  /// This is designed to be safe to call at any time:
+  /// - If no token exists yet, we queue the latest user and replay once a token
+  ///   is obtained (meta or thread).
+  /// - If a token exists, we upsert immediately.
+  ///
+  /// Errors are logged but never thrown (non-fatal).
   Future<void> identify(UserProfile user) async {
-    try {
-      CommentsLogger.info('identify user=${_safeUserId(user.id)}');
+    final now = DateTime.now();
+    if (_invalidBindingUntil != null && now.isBefore(_invalidBindingUntil!)) {
+      return;
+    }
 
-      // Token is scoped to a specific thread. Avoid forcing a token fetch here,
-      // otherwise identify() would grab a token scoped to a meta thread and
-      // immediately trigger a refresh when loading real comments.
-      final cached = _tokens.validBearer();
-      if (cached == null) {
-        CommentsLogger.debug('identify skipped (no auth token yet)');
-        return;
+    _pendingIdentifyUser = user;
+
+    // dedup
+    if (_identifyInFlight != null) return _identifyInFlight!;
+
+    _identifyInFlight = () async {
+      try {
+        final token = _threadTokens.validBearer() ?? _metaTokens.validBearer();
+        if (token == null) return;
+        CommentsLogger.info('identify user=${_safeUserId(user.id)}');
+        await _identifyWithToken(token, user);
+        if (_pendingIdentifyUser?.id == user.id) _pendingIdentifyUser = null;
+
+        // If another update arrived while we were in-flight, flush again.
+        if (_pendingIdentifyUser != null) {
+          _flushPendingIdentifyIfAny().ignore();
+        }
+      } catch (e) {
+        CommentsLogger.error('failed to identify user (non-fatal): $e');
+      } finally {
+        _identifyInFlight = null;
       }
+    }();
 
-      final bearer = cached;
+    return _identifyInFlight!;
+  }
 
-      await _http.postJson(
-        _config.apiBase.resolve('profile/upsert'),
-        {
-          if (user.name != null) 'displayName': user.name,
+  /// Returns a bearer suitable for meta operations (identify/settings/report/react).
+  ///
+  /// This does NOT affect the thread-scoped token cache.
+  Future<String> _getMetaBearer({required String purpose, UserProfile? user}) async {
+    final cached = _metaTokens.validBearer();
+    if (cached != null) {
+      CommentsLogger.info('meta auth token cache hit');
+      return cached;
+    }
+
+    final now = DateTime.now();
+    if (_invalidBindingUntil != null && now.isBefore(_invalidBindingUntil!)) {
+      CommentsLogger.info('auth blocked (invalid_binding cooldown active)');
+      throw CommentsAuthException(
+        'invalid_binding',
+        message: 'This API key requires a valid app binding (signature/origin).',
+      );
+    }
+
+    if (_metaAuthInFlight != null) {
+      return _metaAuthInFlight!;
+    }
+
+    // Use a deterministic high-entropy meta thread key so the backend can scope
+    // JWT claims / RLS consistently without requiring a real content thread.
+    final metaThreadKey = _metaThreadKey(purpose, a: user?.id);
+
+    CommentsLogger.debug(
+      'Preparing headers for meta token request: ${_redactedTokenHeadersForLogs(_config.tokenHeaders())}',
+    );
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ..._config.tokenHeaders(),
+    };
+
+    final body = <String, dynamic>{
+      'apiKey': _config.installKey,
+      'threadKey': metaThreadKey,
+      if (user != null)
+        'externalUser': {
+          'id': user.id,
+          if (user.name != null) 'name': user.name,
           if (user.avatarUrl != null) 'avatarUrl': user.avatarUrl,
         },
-        headers: {
-          'Authorization': 'Bearer $bearer',
-        },
-      );
-    } catch (e, stack) {
-      if (!kReleaseMode) {
-        debugPrintStack(stackTrace: stack);
+    };
+
+    CommentsLogger.info('requesting meta auth token (purpose=$purpose)');
+
+    _metaAuthInFlight = () async {
+      try {
+        final json = await _http.postJson(
+          _config.apiBase.resolve('token'),
+          body,
+          headers: headers,
+        );
+
+        final token = json['access_token'] as String;
+        final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
+        final plan = json['plan'] as String?;
+
+        _metaTokens.save(token, expiresIn, plan: plan);
+
+        CommentsLogger.info(
+          'meta auth token received (purpose=$purpose, expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})',
+        );
+
+        // If we had a pending identify, replay now in the background.
+        // Do not await: keep callers fast.
+        _flushPendingIdentifyIfAny().ignore();
+
+        return token;
+      } catch (e) {
+        CommentsLogger.error(
+          'failed to obtain meta auth token. Check your install key at https://goodvibeslab.cloud '
+          '(key=${_safeKeyPrefix(_config.installKey)}): $e',
+        );
+
+        final msg = e.toString();
+        if (msg.contains('"error":"invalid_binding"') || msg.contains('invalid_binding')) {
+          _invalidBindingUntil = DateTime.now().add(const Duration(seconds: 60));
+          CommentsLogger.info('invalid_binding detected, cooling down for 60s');
+          throw CommentsAuthException(
+            'invalid_binding',
+            message: 'This API key requires a valid app binding (signature/origin).',
+          );
+        }
+        rethrow;
+      } finally {
+        _metaAuthInFlight = null;
       }
-      CommentsLogger.error('failed to identify user (non-fatal): $e');
-      // Best-effort: do not throw.
+    }();
+
+    return _metaAuthInFlight!;
+  }
+
+  Future<void> _flushPendingIdentifyIfAny() {
+    final now = DateTime.now();
+    if (_invalidBindingUntil != null && now.isBefore(_invalidBindingUntil!)) {
+      return Future.value();
     }
+
+    final u = _pendingIdentifyUser;
+    if (u == null) return Future.value();
+
+    final token = _threadTokens.validBearer() ?? _metaTokens.validBearer();
+    if (token == null) return Future.value();
+
+    if (_identifyInFlight != null) return _identifyInFlight!;
+
+    _identifyInFlight = () async {
+      try {
+        await _identifyWithToken(token, u);
+        if (_pendingIdentifyUser?.id == u.id) _pendingIdentifyUser = null;
+      } finally {
+        _identifyInFlight = null;
+      }
+    }();
+
+    return _identifyInFlight!;
+  }
+
+  Future<void> _identifyWithToken(String token, UserProfile user) async {
+    await _http.postJson(
+      _config.apiBase.resolve('profile/upsert'),
+      {
+        if (user.name != null) 'displayName': user.name,
+        if (user.avatarUrl != null) 'avatarUrl': user.avatarUrl,
+      },
+      headers: {'Authorization': 'Bearer $token'},
+    );
   }
 }
