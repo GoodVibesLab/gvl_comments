@@ -1,0 +1,57 @@
+{
+  "@@locale": "es",
+  "retryTooltip": "Reintentar",
+  "sendTooltip": "Enviar",
+  "addCommentHint": "Añadir un comentario…",
+  "signInToCommentHint": "Inicia sesión para comentar",
+  "reportSentLabel": "Reporte enviado",
+  "reportErrorLabel": "Error al enviar el reporte",
+  "reportLabel": "Reportar",
+  "alreadyReportedLabel": "Ya reportaste este comentario",
+  "reportedPlaceholderLabel": "⚠ Este comentario ha sido reportado",
+  "moderatedPlaceholderLabel": "⚠ Este comentario ha sido moderado",
+  "loadPreviousCommentsLabel": "Cargar comentarios anteriores",
+  "timeJustNow": "Ahora mismo",
+  "timeOneMinute": "Hace 1 min",
+  "timeXMinutes": "Hace {m} min",
+  "timeOneHour": "Hace 1h",
+  "timeXHours": "Hace {h}h",
+  "timeYesterday": "Ayer",
+  "timeXDays": "Hace {d} días",
+  "timeFallbackDate": "{d}/{m}/{y}",
+  "errorTitle": "Error",
+  "retryLabel": "Reintentar",
+  "genericErrorLabel": "Algo salió mal.",
+  "networkErrorLabel": "Error de red. Verifica tu conexión e inténtalo de nuevo.",
+  "unauthorizedErrorLabel": "Error de autenticación. Inicia sesión de nuevo.",
+  "timeoutErrorLabel": "La solicitud expiró. Inténtalo de nuevo.",
+  "detailsLabel": "Detalles",
+  "copyLabel": "Copiar",
+  "copiedLabel": "Copiado",
+  "replyLabel": "Responder",
+  "replyingToLabel": "Respondiendo a {name}",
+  "@replyingToLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "replyHint": "Responder a {name}…",
+  "@replyHint": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "cancelReplyTooltip": "Cancelar respuesta",
+  "seeMoreReplies": "Ver {count} {count, plural, =1{respuesta} other{respuestas}} más",
+  "@seeMoreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reactionLike": "Me gusta",
+  "reactionLove": "Me encanta",
+  "reactionLaugh": "Jaja",
+  "reactionWow": "Guau",
+  "reactionSad": "Triste",
+  "reactionAngry": "Grr"
+}

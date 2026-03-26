@@ -1,3 +1,69 @@
+/// Moderation status of a comment.
+enum CommentStatus {
+  /// Awaiting moderation.
+  pending('pending'),
+
+  /// Safe and fully visible.
+  approved('approved'),
+
+  /// Moderated; content should be hidden in the UI.
+  rejected('rejected');
+
+  const CommentStatus(this.value);
+
+  /// The raw string value stored in the API/database.
+  final String value;
+
+  /// Parses a raw API string into a [CommentStatus].
+  ///
+  /// Returns [CommentStatus.pending] for unknown or null values.
+  static CommentStatus fromString(String? raw) {
+    if (raw == null) return CommentStatus.pending;
+    for (final s in values) {
+      if (s.value == raw) return s;
+    }
+    return CommentStatus.pending;
+  }
+}
+
+/// Reaction types available on comments.
+///
+/// Each value maps to a stable identifier stored in the database and an emoji
+/// for display.
+enum Reaction {
+  like('like', '\u{1F44D}'),
+  love('love', '\u{2764}\u{FE0F}'),
+  laugh('laugh', '\u{1F602}'),
+  wow('wow', '\u{1F62E}'),
+  sad('sad', '\u{1F622}'),
+  angry('angry', '\u{1F621}');
+
+  const Reaction(this.id, this.emoji);
+
+  /// Stable identifier sent to the API (e.g. `"like"`).
+  final String id;
+
+  /// Emoji glyph for display.
+  final String emoji;
+
+  /// Parses a raw API string into a [Reaction], or returns `null` if unknown.
+  static Reaction? fromString(String? raw) {
+    if (raw == null) return null;
+    for (final r in values) {
+      if (r.id == raw) return r;
+    }
+    return null;
+  }
+
+  /// Returns the emoji for a given reaction [id], defaulting to thumbs up.
+  static String emojiFor(String id) {
+    for (final r in values) {
+      if (r.id == id) return r.emoji;
+    }
+    return like.emoji;
+  }
+}
+
 /// Model representing a single comment returned by the Comments API.
 class CommentModel {
   /// Creates an immutable comment model.
@@ -27,17 +93,38 @@ class CommentModel {
   final bool isFlagged;
 
   /// Moderation status for the comment.
+  final CommentStatus commentStatus;
+
+  /// Raw status string for backward compatibility.
   ///
-  /// Possible values include:
-  /// - `"pending"`   → awaiting moderation
-  /// - `"approved"`  → safe and fully visible
-  /// - `"rejected"`  → moderated; content should be hidden in the UI
-  final String status;
+  /// Prefer [commentStatus] for type-safe comparisons.
+  String get status => commentStatus.value;
 
   /// Known moderation status values returned by the API.
+  @Deprecated('Use CommentStatus enum instead.')
   static const String statusPending = 'pending';
+  @Deprecated('Use CommentStatus enum instead.')
   static const String statusApproved = 'approved';
+  @Deprecated('Use CommentStatus enum instead.')
   static const String statusRejected = 'rejected';
+
+  // ---------------------------------------------------------------------------
+  // Threading
+  // ---------------------------------------------------------------------------
+
+  /// Parent comment ID. `null` for root comments.
+  final String? parentId;
+
+  /// Nesting depth: 0 = root, 1 = direct reply, 2 = nested reply.
+  final int depth;
+
+  /// When a reply to a depth-2 comment is flattened, stores the original
+  /// target comment ID (from server `metadata.reply_to_comment_id`).
+  final String? replyToCommentId;
+
+  /// When a reply to a depth-2 comment is flattened, stores the original
+  /// target user ID (from server `metadata.reply_to_user_id`).
+  final String? replyToUserId;
 
   // ---------------------------------------------------------------------------
   // Reactions (optional)
@@ -69,7 +156,13 @@ class CommentModel {
     required this.createdAt,
     this.avatarUrl,
     this.isFlagged = false,
-    this.status = statusPending,
+    this.commentStatus = CommentStatus.pending,
+
+    // Threading
+    this.parentId,
+    this.depth = 0,
+    this.replyToCommentId,
+    this.replyToUserId,
 
     // Reactions are optional and may be omitted by the backend.
     this.viewerReaction,
@@ -119,6 +212,10 @@ class CommentModel {
       createdAt = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
     }
 
+    // Threading fields
+    final rawMetadata = json['metadata'];
+    final metadata = rawMetadata is Map ? rawMetadata : null;
+
     return CommentModel(
       id: json['id'] as String,
       externalUserId: json['external_user_id'] as String,
@@ -127,7 +224,11 @@ class CommentModel {
       createdAt: createdAt,
       avatarUrl: json['avatar_url_canonical'] as String?,
       isFlagged: json['is_flagged'] as bool? ?? false,
-      status: (json['status'] as String?) ?? statusPending,
+      commentStatus: CommentStatus.fromString(json['status'] as String?),
+      parentId: json['parent_id'] as String?,
+      depth: (json['depth'] as num?)?.toInt() ?? 0,
+      replyToCommentId: metadata?['reply_to_comment_id'] as String?,
+      replyToUserId: metadata?['reply_to_user_id'] as String?,
       viewerReaction:
           (viewer != null && viewer.trim().isNotEmpty) ? viewer.trim() : null,
       reactionCounts: counts,
@@ -145,7 +246,7 @@ class CommentModel {
   /// In this case, the UI should replace the comment body with a message such as
   /// *"This comment has been reported."*. Flagged comments remain in the
   /// thread so the conversation structure is preserved.
-  bool get isReported => status == statusPending && isFlagged;
+  bool get isReported => commentStatus == CommentStatus.pending && isFlagged;
 
   /// Returns `true` if the comment has been explicitly moderated and marked
   /// as `"rejected"`.
@@ -153,7 +254,7 @@ class CommentModel {
   /// Rejected comments remain visible in the thread structure, but their
   /// content must be replaced by:
   /// *"This comment has been moderated."*
-  bool get isModerated => status == statusRejected;
+  bool get isModerated => commentStatus == CommentStatus.rejected;
 
   /// Returns `true` when the comment body can be displayed as-is
   /// (i.e. the comment is neither reported nor moderated).
@@ -174,7 +275,11 @@ class CommentModel {
     DateTime? createdAt,
     String? avatarUrl,
     bool? isFlagged,
-    String? status,
+    CommentStatus? commentStatus,
+    Object? parentId = _unset,
+    int? depth,
+    Object? replyToCommentId = _unset,
+    Object? replyToUserId = _unset,
     Object? viewerReaction = _unset,
     Map<String, int>? reactionCounts,
     int? reactionTotal,
@@ -187,12 +292,47 @@ class CommentModel {
       createdAt: createdAt ?? this.createdAt,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isFlagged: isFlagged ?? this.isFlagged,
-      status: status ?? this.status,
+      commentStatus: commentStatus ?? this.commentStatus,
+      parentId:
+          parentId == _unset ? this.parentId : parentId as String?,
+      depth: depth ?? this.depth,
+      replyToCommentId: replyToCommentId == _unset
+          ? this.replyToCommentId
+          : replyToCommentId as String?,
+      replyToUserId: replyToUserId == _unset
+          ? this.replyToUserId
+          : replyToUserId as String?,
       viewerReaction: viewerReaction == _unset
           ? this.viewerReaction
           : viewerReaction as String?,
       reactionCounts: reactionCounts ?? this.reactionCounts,
       reactionTotal: reactionTotal ?? this.reactionTotal,
+    );
+  }
+}
+
+/// Prefetched thread information (count + top comment).
+///
+/// Populated by [CommentsKit.prefetchThreads] so that [TopComment] and
+/// [CommentCount] widgets can read cached data without individual API calls.
+class ThreadInfo {
+  /// Number of approved comments in this thread.
+  final int count;
+
+  /// The most-engaged comment, or `null` if the thread has no approved comments.
+  final CommentModel? topComment;
+
+  const ThreadInfo({required this.count, this.topComment});
+
+  factory ThreadInfo.fromJson(Map<String, dynamic> json) {
+    final rawTop = json['top_comment'];
+    CommentModel? top;
+    if (rawTop is Map<String, dynamic>) {
+      top = CommentModel.fromJson(rawTop);
+    }
+    return ThreadInfo(
+      count: (json['approved_comment_count'] as num?)?.toInt() ?? 0,
+      topComment: top,
     );
   }
 }

@@ -1,0 +1,57 @@
+{
+  "@@locale": "pt",
+  "retryTooltip": "Tentar novamente",
+  "sendTooltip": "Enviar",
+  "addCommentHint": "Adicionar um comentário…",
+  "signInToCommentHint": "Entre para comentar",
+  "reportSentLabel": "Denúncia enviada",
+  "reportErrorLabel": "Erro ao enviar denúncia",
+  "reportLabel": "Denunciar",
+  "alreadyReportedLabel": "Você já denunciou este comentário",
+  "reportedPlaceholderLabel": "⚠ Este comentário foi denunciado",
+  "moderatedPlaceholderLabel": "⚠ Este comentário foi moderado",
+  "loadPreviousCommentsLabel": "Carregar comentários anteriores",
+  "timeJustNow": "Agora mesmo",
+  "timeOneMinute": "Há 1 min",
+  "timeXMinutes": "Há {m} min",
+  "timeOneHour": "Há 1h",
+  "timeXHours": "Há {h}h",
+  "timeYesterday": "Ontem",
+  "timeXDays": "Há {d} dias",
+  "timeFallbackDate": "{d}/{m}/{y}",
+  "errorTitle": "Erro",
+  "retryLabel": "Tentar novamente",
+  "genericErrorLabel": "Algo deu errado.",
+  "networkErrorLabel": "Erro de rede. Verifique sua conexão e tente novamente.",
+  "unauthorizedErrorLabel": "Erro de autenticação. Faça login novamente.",
+  "timeoutErrorLabel": "A solicitação expirou. Tente novamente.",
+  "detailsLabel": "Detalhes",
+  "copyLabel": "Copiar",
+  "copiedLabel": "Copiado",
+  "replyLabel": "Responder",
+  "replyingToLabel": "Respondendo a {name}",
+  "@replyingToLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "replyHint": "Responder a {name}…",
+  "@replyHint": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "cancelReplyTooltip": "Cancelar resposta",
+  "seeMoreReplies": "Ver mais {count} {count, plural, =1{resposta} other{respostas}}",
+  "@seeMoreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reactionLike": "Curtir",
+  "reactionLove": "Amei",
+  "reactionLaugh": "Haha",
+  "reactionWow": "Uau",
+  "reactionSad": "Triste",
+  "reactionAngry": "Grr"
+}

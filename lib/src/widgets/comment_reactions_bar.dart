@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../l10n/gvl_comments_l10n.dart';
 import '../models.dart';
 
 /// Small, Messenger-like reactions bar displayed under a comment bubble.
@@ -84,7 +85,7 @@ class CommentReactionsBar extends StatelessWidget {
             if (viewer != null && viewer.isNotEmpty) {
               onReact(null);
             } else {
-              onReact(_ReactionCatalog.like.id);
+              onReact(Reaction.like.id);
             }
           },
           onPick: (picked) {
@@ -105,7 +106,7 @@ class CommentReactionsBar extends StatelessWidget {
                 if (top.isNotEmpty) ...[
                   for (final r in top) ...[
                     Text(
-                      _ReactionCatalog.emojiFor(r.id),
+                      Reaction.emojiFor(r.id),
                       style: const TextStyle(fontSize: 14),
                     ),
                     const SizedBox(width: 2),
@@ -126,50 +127,22 @@ class CommentReactionsBar extends StatelessWidget {
   }
 }
 
-/// Internal representation of a reaction with stable identifier and emoji.
-class _ReactionOption {
-  final String id;
-  final String emoji;
-  final String label;
-
-  const _ReactionOption({
-    required this.id,
-    required this.emoji,
-    required this.label,
-  });
-}
-
-/// Fixed reaction catalog (v1).
-///
-/// The identifiers are stable and are also stored in the database.
-class _ReactionCatalog {
-  static const _ReactionOption like =
-      _ReactionOption(id: 'like', emoji: '👍', label: 'Like');
-  static const _ReactionOption love =
-      _ReactionOption(id: 'love', emoji: '❤️', label: 'Love');
-  static const _ReactionOption laugh =
-      _ReactionOption(id: 'laugh', emoji: '😂', label: 'Haha');
-  static const _ReactionOption wow =
-      _ReactionOption(id: 'wow', emoji: '😮', label: 'Wow');
-  static const _ReactionOption sad =
-      _ReactionOption(id: 'sad', emoji: '😢', label: 'Sad');
-  static const _ReactionOption angry =
-      _ReactionOption(id: 'angry', emoji: '😡', label: 'Angry');
-
-  static const List<_ReactionOption> all = <_ReactionOption>[
-    like,
-    love,
-    laugh,
-    wow,
-    sad,
-    angry,
-  ];
-
-  static String emojiFor(String id) {
-    for (final r in all) {
-      if (r.id == id) return r.emoji;
-    }
-    return '👍';
+/// Returns the localized label for a [Reaction], falling back to English.
+String _reactionLabel(Reaction r, GvlCommentsL10n? l10n) {
+  if (l10n == null) return r.id;
+  switch (r) {
+    case Reaction.like:
+      return l10n.reactionLike;
+    case Reaction.love:
+      return l10n.reactionLove;
+    case Reaction.laugh:
+      return l10n.reactionLaugh;
+    case Reaction.wow:
+      return l10n.reactionWow;
+    case Reaction.sad:
+      return l10n.reactionSad;
+    case Reaction.angry:
+      return l10n.reactionAngry;
   }
 }
 
@@ -242,7 +215,7 @@ Future<String?> _showOverlayPicker(
   final safeTop = media.padding.top;
   final safeBottom = media.padding.bottom;
 
-  final int n = _ReactionCatalog.all.length;
+  final int n = Reaction.values.length;
   final double barWidth =
       horizontalPadding * 2 + (emojiSize * n) + (gap * (n - 1));
 
@@ -456,9 +429,10 @@ class _ReactionOverlayState extends State<_ReactionOverlay>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          for (final r in _ReactionCatalog.all)
+                          for (final r in Reaction.values)
                             _EmojiButton(
                               emoji: r.emoji,
+                              label: _reactionLabel(r, GvlCommentsL10n.of(context)),
                               isSelected: widget.currentReaction == r.id,
                               onTap: () => widget.onPick(r.id),
                             ),
@@ -478,11 +452,13 @@ class _ReactionOverlayState extends State<_ReactionOverlay>
 
 class _EmojiButton extends StatefulWidget {
   final String emoji;
+  final String label;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _EmojiButton({
     required this.emoji,
+    required this.label,
     required this.isSelected,
     required this.onTap,
   });
@@ -527,22 +503,26 @@ class _EmojiButtonState extends State<_EmojiButton>
       },
       child: ScaleTransition(
         scale: _scale,
-        child: Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          decoration: widget.isSelected
-              ? BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primaryContainer
-                      .withAlpha(220),
-                  borderRadius: BorderRadius.circular(6),
-                )
-              : null,
-          child: Text(
-            widget.emoji,
-            style: const TextStyle(fontSize: 20),
+        child: Semantics(
+          label: widget.label,
+          button: true,
+          child: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: widget.isSelected
+                ? BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withAlpha(220),
+                    borderRadius: BorderRadius.circular(6),
+                  )
+                : null,
+            child: Text(
+              widget.emoji,
+              style: const TextStyle(fontSize: 20),
+            ),
           ),
         ),
       ),

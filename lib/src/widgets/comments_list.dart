@@ -50,7 +50,16 @@ class CommentsList extends StatefulWidget {
   final String threadKey;
 
   /// Profile of the active user used for authentication and author metadata.
-  final UserProfile user;
+  ///
+  /// When `null`, the widget operates in **read-only mode**: comments are
+  /// visible but the composer is hidden and interactions (reply, react) are
+  /// disabled.
+  ///
+  /// To allow anonymous posting, pass a guest profile instead of `null`:
+  /// ```dart
+  /// UserProfile(id: 'guest-$deviceId', name: 'Anonymous')
+  /// ```
+  final UserProfile? user;
 
   /// Optional builder to fully override how each comment is rendered.
   final CommentItemBuilder? commentItemBuilder;
@@ -66,6 +75,11 @@ class CommentsList extends StatefulWidget {
 
   /// Builder for separators between list items.
   final SeparatorBuilder? separatorBuilder;
+
+  /// Builder for the "load more" button shown when pagination is available.
+  ///
+  /// When `null`, a default [TextButton] is used.
+  final LoadMoreButtonBuilder? loadMoreButtonBuilder;
 
   /// Maximum number of comments fetched per page.
   final int limit;
@@ -90,6 +104,39 @@ class CommentsList extends StatefulWidget {
   /// reaction interactions without changing backend behavior.
   final bool reactionsEnabled;
 
+  /// Forces the "Powered by GVL Cloud" branding to be visible.
+  ///
+  /// By default, the branding footer is only shown for free-tier projects.
+  /// Set this to `true` to display it regardless of the current plan
+  /// (e.g. in a demo or showcase app).
+  final bool showBranding;
+
+  /// When `true`, the comment list does not scroll internally.
+  ///
+  /// Use this to embed comments inside a parent scrollable (e.g.
+  /// `SingleChildScrollView` or `CustomScrollView`). The host is
+  /// responsible for providing scroll and the composer should be placed
+  /// outside (e.g. in a `Scaffold.bottomSheet`).
+  ///
+  /// When combined with [header], the widget handles everything: the
+  /// header and comments scroll together inside a `SingleChildScrollView`
+  /// while the composer stays sticky at the bottom.
+  ///
+  /// Defaults to `false` (the widget manages its own scroll).
+  final bool shrinkWrap;
+
+  /// Called when the user taps the composer while not signed in ([user] is
+  /// `null`). Use this to trigger your sign-in flow.
+  final VoidCallback? onSignInTap;
+
+  /// Optional widget displayed above the comment list.
+  ///
+  /// Typically a post card, article preview, or any content that should
+  /// scroll together with the comments. Best used with [shrinkWrap] set
+  /// to `true` — the header scrolls away while the composer stays sticky
+  /// at the bottom.
+  final Widget? header;
+
   /// Creates a comments list bound to a thread and user profile.
   ///
   /// Provide builder callbacks to customize rendering; otherwise sensible
@@ -97,12 +144,14 @@ class CommentsList extends StatefulWidget {
   const CommentsList({
     super.key,
     required this.threadKey,
-    required this.user,
+    this.user,
+    this.onSignInTap,
     this.commentItemBuilder,
     this.avatarBuilder,
     this.sendButtonBuilder,
     this.composerBuilder,
     this.separatorBuilder,
+    this.loadMoreButtonBuilder,
     this.limit = defaultPageSize,
     this.padding,
     this.scrollController,
@@ -110,6 +159,9 @@ class CommentsList extends StatefulWidget {
     // Feed-like by default (newest comments first).
     this.newestAtBottom = false,
     this.reactionsEnabled = true,
+    this.showBranding = false,
+    this.shrinkWrap = false,
+    this.header,
   });
 
   @override
@@ -128,6 +180,12 @@ class CommentMeta {
   /// Whether the comment is currently being sent and not yet confirmed.
   final bool isSending;
 
+  /// Whether this comment is a reply (depth > 0).
+  final bool isReply;
+
+  /// Callback to initiate a reply to this comment.
+  final VoidCallback? onReply;
+
   /// Optional handler for long-press interactions (for example opening a menu).
   final VoidCallback? onLongPress;
 
@@ -138,9 +196,55 @@ class CommentMeta {
   const CommentMeta({
     required this.isMine,
     this.isSending = false,
+    this.isReply = false,
+    this.onReply,
     this.onLongPress,
     this.onTap,
   });
+}
+
+/// A root comment grouped with its replies for threaded display.
+class _CommentThread {
+  final CommentModel root;
+  final List<CommentModel> replies;
+
+  const _CommentThread({required this.root, this.replies = const []});
+}
+
+/// Builds a list of [_CommentThread] from a flat list of comments.
+///
+/// Roots are comments with depth == 0. Replies are grouped under their
+/// root ancestor. The order of roots is preserved; replies within each
+/// thread are sorted by [createdAt] ascending.
+List<_CommentThread> _buildThreads(List<CommentModel> flat) {
+  final roots = <CommentModel>[];
+  final depth1ById = <String, CommentModel>{};
+  final repliesByRoot = <String, List<CommentModel>>{};
+
+  // First pass: separate roots and index depth-1 comments.
+  for (final c in flat) {
+    if (c.depth == 0) {
+      roots.add(c);
+    } else if (c.depth == 1) {
+      depth1ById[c.id] = c;
+      repliesByRoot.putIfAbsent(c.parentId!, () => []).add(c);
+    }
+  }
+
+  // Second pass: attach depth-2 to their root via their depth-1 parent.
+  for (final c in flat) {
+    if (c.depth == 2 && c.parentId != null) {
+      final d1Parent = depth1ById[c.parentId!];
+      final rootId = d1Parent?.parentId ?? c.parentId!;
+      repliesByRoot.putIfAbsent(rootId, () => []).add(c);
+    }
+  }
+
+  return roots.map((r) {
+    final replies = repliesByRoot[r.id] ?? [];
+    replies.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return _CommentThread(root: r, replies: replies);
+  }).toList();
 }
 
 /// Preferred API name (no `Gvl` prefix).
@@ -164,6 +268,7 @@ class GvlCommentsList extends CommentsList {
     super.sendButtonBuilder,
     super.composerBuilder,
     super.separatorBuilder,
+    super.loadMoreButtonBuilder,
     super.limit,
     super.padding,
     super.scrollController,
@@ -171,6 +276,8 @@ class GvlCommentsList extends CommentsList {
     // Inherits default: feed-like ordering (newestAtBottom = false)
     super.newestAtBottom,
     super.reactionsEnabled,
+    super.shrinkWrap,
+    super.header,
   });
 }
 
@@ -179,6 +286,13 @@ class _CommentsListState extends State<CommentsList>
   List<CommentModel>? _comments;
   String? _error;
   final _ctrl = TextEditingController();
+  final _focusNode = FocusNode();
+
+  /// The comment currently being replied to (`null` = posting a root).
+  CommentModel? _replyingTo;
+
+  /// Root IDs whose reply threads have been fully expanded by the user.
+  final _expandedThreads = <String>{};
 
   // Scroll controller used by the ListView.
   // If the host app provides one, we use it; otherwise we create our own.
@@ -240,7 +354,7 @@ class _CommentsListState extends State<CommentsList>
       _scrollController = widget.scrollController ?? ScrollController();
     }
 
-    if (oldWidget.user.id != widget.user.id) {
+    if (oldWidget.user?.id != widget.user?.id) {
       CommentsKit.I().invalidateToken();
       _resetPagination();
       _primeAndLoad();
@@ -259,33 +373,36 @@ class _CommentsListState extends State<CommentsList>
   Future<void> _primeAndLoad() async {
     final kit = CommentsKit.I();
 
-    // 1) Fetch moderation settings (best-effort).
-    // If auth is blocked, step (1) returned early.
-    try {
-      final settings = await kit.getModerationSettings(user: widget.user);
+    // Best-effort identify (fire-and-forget).
+    final user = widget.user;
+    if (user != null) {
+      unawaited(kit.identify(user));
+    }
+
+    // Fetch moderation settings and comments in PARALLEL.
+    // Settings are non-critical — comments should never wait for them.
+    final settingsFuture = kit
+        .getModerationSettings(user: user)
+        .then((settings) {
       if (mounted) {
         setState(() {
           _userReportsEnabled = settings.userReportsEnabled;
         });
       }
-    } catch (e) {
-      // Moderation settings are non-critical; avoid noisy logs for auth failures.
+    }).catchError((Object e) {
       if (e is CommentsAuthException) {
         debugPrint(
             'gvl_comments: moderation settings unavailable (${e.code}) — keeping defaults');
       } else {
         debugPrint('gvl_comments: error while loading moderation settings: $e');
       }
-      // On error, we keep the default = true (reports enabled).
-    }
+    });
 
-    // 2) Best-effort identify.
-    // If auth is blocked (e.g. invalid_binding cooldown), stop the pipeline early
-    // so we don't spam additional endpoints and we surface a single, clear error.
-    unawaited(kit.identify(widget.user));
-
-    // 3) Load comments.
+    // Load comments without waiting for settings.
     await _load();
+
+    // Ensure settings complete before we're fully done (best-effort).
+    await settingsFuture;
   }
 
   Future<void> _load() async {
@@ -410,15 +527,37 @@ class _CommentsListState extends State<CommentsList>
     final tempId = 'local-${DateTime.now().microsecondsSinceEpoch}';
     final now = DateTime.now().toUtc();
 
+    // Capture reply target before clearing state.
+    final replyTarget = _replyingTo;
+    final int pendingDepth;
+    final String? pendingParentId;
+
+    if (replyTarget != null) {
+      if (replyTarget.depth < 2) {
+        pendingDepth = replyTarget.depth + 1;
+        pendingParentId = replyTarget.id;
+      } else {
+        // Flattened: depth stays 2, parent becomes the depth-1 ancestor.
+        pendingDepth = 2;
+        pendingParentId = replyTarget.parentId;
+      }
+    } else {
+      pendingDepth = 0;
+      pendingParentId = null;
+    }
+
+    final user = widget.user;
     final pending = CommentModel(
       id: tempId,
-      externalUserId: widget.user.id,
-      authorName: widget.user.name,
+      externalUserId: user?.id ?? '',
+      authorName: user?.name,
       body: text,
       createdAt: now,
-      avatarUrl: widget.user.avatarUrl,
+      avatarUrl: user?.avatarUrl,
       isFlagged: false,
-      status: 'pending',
+      commentStatus: CommentStatus.pending,
+      parentId: pendingParentId,
+      depth: pendingDepth,
     );
 
     // Add optimistic comment.
@@ -429,6 +568,8 @@ class _CommentsListState extends State<CommentsList>
       // stays consistent, regardless of UI ordering.
       _comments = [pending, ...(_comments ?? [])];
       _ctrl.clear();
+      _replyingTo = null;
+      _focusNode.unfocus();
     });
 
     // Keep the freshly posted comment in view.
@@ -440,6 +581,7 @@ class _CommentsListState extends State<CommentsList>
         threadKey: widget.threadKey,
         body: text,
         user: widget.user,
+        parentId: replyTarget?.id,
       );
 
       if (!mounted) return;
@@ -572,6 +714,7 @@ class _CommentsListState extends State<CommentsList>
   @override
   void dispose() {
     _ctrl.dispose();
+    _focusNode.dispose();
     if (_ownsScrollController) {
       _scrollController.dispose();
     }
@@ -621,150 +764,298 @@ class _CommentsListState extends State<CommentsList>
     // All comments returned by the API are safe to render.
     // Server-side RLS / views already hide hard-deleted comments.
     final rawComments = _comments ?? <CommentModel>[];
-    final comments = widget.newestAtBottom
-        ? rawComments.reversed.toList(growable: false) // oldest -> newest
-        : rawComments;
+
+    // Build threaded structure from the flat list.
+    var threads = _buildThreads(rawComments);
+    if (widget.newestAtBottom) {
+      threads = threads.reversed.toList(growable: false);
+    }
 
     final padding =
         widget.padding ?? EdgeInsets.symmetric(vertical: (t.spacing ?? 8));
 
-    final hasMoreRow = _hasMore && comments.isNotEmpty;
-    final itemCount = comments.length + (hasMoreRow ? 1 : 0);
+    final hasMoreRow = _hasMore && threads.isNotEmpty;
+    final itemCount = threads.length + (hasMoreRow ? 1 : 0);
 
+    final listView = ListView.separated(
+      controller: widget.shrinkWrap ? null : _scrollController,
+      shrinkWrap: widget.shrinkWrap,
+      physics: widget.shrinkWrap
+          ? const NeverScrollableScrollPhysics()
+          : null,
+      reverse: false,
+      padding: padding,
+      itemCount: itemCount,
+      separatorBuilder: (ctx, index) {
+        // Do not put a separator adjacent to the "load more" row.
+        if (hasMoreRow) {
+          if (widget.newestAtBottom && index == 0) {
+            return const SizedBox.shrink();
+          }
+          if (!widget.newestAtBottom && index == threads.length - 1) {
+            return const SizedBox.shrink();
+          }
+        }
+        return _buildSeparator(ctx);
+      },
+      itemBuilder: (ctx, i) {
+        // Load-more row position depends on ordering.
+        if (hasMoreRow) {
+          if (widget.newestAtBottom && i == 0) {
+            return _buildLoadMoreRow(ctx);
+          }
+          if (!widget.newestAtBottom && i == threads.length) {
+            return _buildLoadMoreRow(ctx);
+          }
+        }
+
+        final threadIndex =
+            (hasMoreRow && widget.newestAtBottom) ? i - 1 : i;
+        final thread = threads[threadIndex];
+
+        return _buildThreadItem(ctx, thread, t);
+      },
+    );
+
+    final branding = (widget.showBranding ||
+            (CommentsKit.I().currentPlan ?? 'free') == 'free')
+        ? _buildBrandingFooter(context)
+        : null;
+
+    // Show active composer or disabled sign-in prompt.
+    final isReadOnly = widget.user == null;
+    final composer = isReadOnly
+        ? _buildDisabledComposer(context, t, l10n)
+        : _buildComposer(context, t, l10n);
+    final bgColor = t.backgroundColor ?? Colors.transparent;
+
+    // --- Mode: shrinkWrap + header ---
+    // Header and comments scroll together, composer stays sticky at bottom.
+    if (widget.shrinkWrap && widget.header != null) {
+      return ColoredBox(
+        color: bgColor,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: padding,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    widget.header!,
+                    // Build thread items directly (no nested ListView).
+                    if (hasMoreRow && widget.newestAtBottom)
+                      _buildLoadMoreRow(context),
+                    for (int i = 0; i < threads.length; i++) ...[
+                      if (i > 0) _buildSeparator(context),
+                      _buildThreadItem(context, threads[i], t),
+                    ],
+                    if (hasMoreRow && !widget.newestAtBottom)
+                      _buildLoadMoreRow(context),
+                    if (branding != null) branding,
+                  ],
+                ),
+              ),
+            ),
+            composer,
+          ],
+        ),
+      );
+    }
+
+    // --- Mode: shrinkWrap (no header) ---
+    // No internal scroll, no composer. Host manages scroll and composer.
+    if (widget.shrinkWrap) {
+      return ColoredBox(
+        color: bgColor,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            listView,
+            if (branding != null) branding,
+            composer,
+          ],
+        ),
+      );
+    }
+
+    // --- Default mode ---
+    // Self-contained scroll with sticky composer.
     return ColoredBox(
-      color: t.backgroundColor ?? Colors.transparent,
+      color: bgColor,
       child: Column(
         children: [
-          Expanded(
-            child: ListView.separated(
-              controller: _scrollController,
-              reverse: false,
-              padding: padding,
-              itemCount: itemCount,
-              separatorBuilder: (ctx, index) {
-                // Do not put a separator adjacent to the "load more" row.
-                if (hasMoreRow) {
-                  // When newestAtBottom=true, the load more row should be at the top (index 0).
-                  if (widget.newestAtBottom && index == 0) {
-                    return const SizedBox.shrink();
-                  }
-                  // When newestAtBottom=false, the load more row is at the bottom (after last comment).
-                  if (!widget.newestAtBottom && index == comments.length - 1) {
-                    return const SizedBox.shrink();
-                  }
-                }
-                return _buildSeparator(ctx);
-              },
-              itemBuilder: (ctx, i) {
-                // Load-more row position depends on ordering.
-                // - newestAtBottom=true  => oldest at top => "load previous" belongs at the top.
-                // - newestAtBottom=false => newest at top => "load previous" belongs at the bottom.
-                if (hasMoreRow) {
-                  if (widget.newestAtBottom && i == 0) {
-                    return _buildLoadMoreRow(ctx);
-                  }
-                  if (!widget.newestAtBottom && i == comments.length) {
-                    return _buildLoadMoreRow(ctx);
-                  }
-                }
-
-                // Map list index to comment index.
-                final commentIndex =
-                    (hasMoreRow && widget.newestAtBottom) ? i - 1 : i;
-
-                final c = comments[commentIndex];
-                final isMine = c.externalUserId == widget.user.id;
-
-                // Build the raw comment item.
-                Widget baseItem;
-                if (widget.commentItemBuilder != null) {
-                  baseItem = widget.commentItemBuilder!(
-                    ctx,
-                    c,
-                    CommentMeta(
-                      isMine: isMine,
-                      isSending: _pendingIds.contains(c.id),
-                    ),
-                  );
-                } else {
-                  baseItem = _DefaultCommentItem(
-                    comment: c,
-                    isMine: isMine,
-                    avatarBuilder: widget.avatarBuilder,
-                    isSending: _pendingIds.contains(c.id),
-                    reactionsEnabled: widget.reactionsEnabled,
-                    onReact: widget.reactionsEnabled ? _onReact : null,
-                  );
-                }
-
-                // Apply a subtle entry animation for freshly created comments.
-                final isJustCreated = _recentlyCreatedCommentIds.contains(c.id);
-
-                Widget animatedItem;
-                if (isJustCreated) {
-                  animatedItem = TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: 1),
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOut,
-                    onEnd: () {
-                      if (!mounted) return;
-                      setState(() {
-                        _recentlyCreatedCommentIds.remove(c.id);
-                      });
-                    },
-                    builder: (context, value, child) {
-                      return Opacity(
-                        opacity: value,
-                        child: Transform.translate(
-                          offset: Offset(0, (1 - value) * 6),
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: baseItem,
-                  );
-                } else {
-                  animatedItem = baseItem;
-                }
-
-                return Stack(
-                  children: [
-                    animatedItem,
-                    if (_userReportsEnabled)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: PopupMenuButton<String>(
-                          icon: const Icon(
-                            Icons.more_vert,
-                            size: 18,
-                          ),
-                          onSelected: (value) {
-                            if (value == 'report') {
-                              _onReportComment(c);
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem<String>(
-                              value: 'report',
-                              child: Text(
-                                GvlCommentsL10n.of(context)?.reportLabel ??
-                                    'Report',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-          if ((CommentsKit.I().currentPlan ?? 'free') == 'free')
-            _buildBrandingFooter(context),
-          _buildComposer(context, t, l10n),
+          Expanded(child: listView),
+          if (branding != null) branding,
+          composer,
         ],
       ),
+    );
+  }
+
+  /// Maximum number of replies shown before the "See more" button.
+  static const _collapsedReplyLimit = 2;
+
+  /// Builds a full thread: root comment + indented replies.
+  Widget _buildThreadItem(
+      BuildContext ctx, _CommentThread thread, GvlCommentsThemeData t) {
+    final avatarSize = t.avatarSize ?? 32;
+    final spacing = t.spacing ?? 8;
+    final replyIndent = avatarSize + spacing;
+
+    final isExpanded = _expandedThreads.contains(thread.root.id);
+    final allReplies = thread.replies;
+    final visibleReplies =
+        isExpanded || allReplies.length <= _collapsedReplyLimit
+            ? allReplies
+            : allReplies.sublist(0, _collapsedReplyLimit);
+    final hiddenCount = allReplies.length - visibleReplies.length;
+
+    final l10n = GvlCommentsL10n.of(ctx);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSingleComment(ctx, thread.root, indentLeft: 0),
+        for (final reply in visibleReplies)
+          Padding(
+            padding: EdgeInsets.only(
+              left: reply.depth >= 2 ? replyIndent * 2 : replyIndent,
+            ),
+            child: _buildSingleComment(
+              ctx,
+              reply,
+              indentLeft: reply.depth >= 2 ? replyIndent * 2 : replyIndent,
+            ),
+          ),
+        if (hiddenCount > 0)
+          Padding(
+            padding: EdgeInsets.only(left: replyIndent, top: 4, bottom: 4),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _expandedThreads.add(thread.root.id);
+                });
+              },
+              child: Text(
+                l10n?.seeMoreReplies(hiddenCount) ??
+                    'See $hiddenCount more ${hiddenCount == 1 ? 'reply' : 'replies'}',
+                style: TextStyle(
+                  color: Theme.of(ctx).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Builds a single comment item with animation, report menu, and reply button.
+  Widget _buildSingleComment(BuildContext ctx, CommentModel c,
+      {required double indentLeft}) {
+    final user = widget.user;
+    final isMine = user != null && c.externalUserId == user.id;
+    final isSending = _pendingIds.contains(c.id);
+    final isReadOnly = user == null;
+
+    void onReply() {
+      setState(() {
+        _replyingTo = c;
+      });
+      _focusNode.requestFocus();
+    }
+
+    final canReact = widget.reactionsEnabled && !isReadOnly;
+
+    Widget baseItem;
+    if (widget.commentItemBuilder != null) {
+      baseItem = widget.commentItemBuilder!(
+        ctx,
+        c,
+        CommentMeta(
+          isMine: isMine,
+          isSending: isSending,
+          isReply: c.depth > 0,
+          onReply: isReadOnly ? null : onReply,
+        ),
+      );
+    } else {
+      baseItem = _DefaultCommentItem(
+        comment: c,
+        isMine: isMine,
+        avatarBuilder: widget.avatarBuilder,
+        isSending: isSending,
+        reactionsEnabled: canReact,
+        onReact: canReact ? _onReact : null,
+        onReply: isReadOnly ? null : onReply,
+        allComments: _comments ?? [],
+      );
+    }
+
+    // Apply a subtle entry animation for freshly created comments.
+    final isJustCreated = _recentlyCreatedCommentIds.contains(c.id);
+
+    Widget animatedItem;
+    if (isJustCreated) {
+      animatedItem = TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        onEnd: () {
+          if (!mounted) return;
+          setState(() {
+            _recentlyCreatedCommentIds.remove(c.id);
+          });
+        },
+        builder: (context, value, child) {
+          return Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, (1 - value) * 6),
+              child: child,
+            ),
+          );
+        },
+        child: baseItem,
+      );
+    } else {
+      animatedItem = baseItem;
+    }
+
+    return Stack(
+      children: [
+        animatedItem,
+        if (_userReportsEnabled)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: PopupMenuButton<String>(
+              icon: Icon(
+                Icons.more_horiz,
+                size: 16,
+                color: Theme.of(ctx).colorScheme.onSurfaceVariant.withAlpha(100),
+              ),
+              onSelected: (value) {
+                if (value == 'report') {
+                  _onReportComment(c);
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem<String>(
+                  value: 'report',
+                  child: Text(
+                    GvlCommentsL10n.of(context)?.reportLabel ?? 'Report',
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -823,13 +1114,65 @@ class _CommentsListState extends State<CommentsList>
     );
   }
 
+  /// Disabled composer shown when [CommentsList.user] is `null`.
+  ///
+  /// Displays a grayed-out text field with a "Sign in to comment" hint.
+  /// Tapping it invokes [CommentsList.onSignInTap] when provided.
+  Widget _buildDisabledComposer(
+    BuildContext context,
+    GvlCommentsThemeData t,
+    GvlCommentsL10n? l10n,
+  ) {
+    final hint =
+        l10n?.signInToCommentHint ?? 'Sign in to comment';
+
+    return SafeArea(
+      top: false,
+      child: GestureDetector(
+        onTap: widget.onSignInTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            t.spacing ?? 8,
+            (t.spacing ?? 8) / 2,
+            t.spacing ?? 8,
+            t.spacing ?? 8,
+          ),
+          child: Opacity(
+            opacity: 0.5,
+            child: IgnorePointer(
+              child: TextField(
+                enabled: false,
+                decoration: InputDecoration(
+                  hintText: hint,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  filled: true,
+                  fillColor:
+                      Theme.of(context).colorScheme.surfaceContainerHigh,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildComposer(
     BuildContext context,
     GvlCommentsThemeData t,
     GvlCommentsL10n? l10n,
   ) {
     final maxLines = t.composerMaxLines ?? 6;
-    final hint = l10n?.addCommentHint;
+    final replyTo = _replyingTo;
+    final replyName =
+        replyTo?.authorName ?? replyTo?.externalUserId ?? '';
+    final hint = replyTo != null
+        ? (l10n?.replyHint(replyName) ?? 'Reply to $replyName…')
+        : l10n?.addCommentHint;
 
     if (widget.composerBuilder != null) {
       return widget.composerBuilder!(
@@ -844,68 +1187,118 @@ class _CommentsListState extends State<CommentsList>
 
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          t.spacing ?? 8,
-          (t.spacing ?? 8) / 2,
-          t.spacing ?? 8,
-          t.spacing ?? 8,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Material(
-                color: Theme.of(context).colorScheme.surface,
-                shape: t.composerShape ??
-                    const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(999)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // "Replying to @name" chip
+          if (replyTo != null)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                t.spacing ?? 8,
+                (t.spacing ?? 8) / 2,
+                t.spacing ?? 8,
+                0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n?.replyingToLabel(replyName) ??
+                          'Replying to $replyName',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                child: Container(
-                  color: t.backgroundColor ??
-                      Theme.of(context).colorScheme.surface,
-                  child: TextField(
-                    controller: _ctrl,
-                    textInputAction: TextInputAction.newline,
-                    maxLines: null,
-                    minLines: 1,
-                    decoration: InputDecoration(
-                      hintText: hint,
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
+                  ),
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 16,
+                      tooltip: l10n?.cancelReplyTooltip ?? 'Cancel reply',
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() {
+                          _replyingTo = null;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              t.spacing ?? 8,
+              (t.spacing ?? 8) / 2,
+              t.spacing ?? 8,
+              t.spacing ?? 8,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    shape: t.composerShape ??
+                        const RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.all(Radius.circular(999)),
+                        ),
+                    child: Container(
+                      color: t.backgroundColor ??
+                          Theme.of(context).colorScheme.surface,
+                      child: TextField(
+                        controller: _ctrl,
+                        focusNode: _focusNode,
+                        textInputAction: TextInputAction.newline,
+                        maxLines: null,
+                        minLines: 1,
+                        decoration: InputDecoration(
+                          hintText: hint,
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHigh,
+                        ),
                       ),
-                      filled: true,
-                      fillColor:
-                          Theme.of(context).colorScheme.surfaceContainerHigh,
                     ),
                   ),
                 ),
-              ),
+                SizedBox(width: (t.spacing ?? 8) / 2),
+                widget.sendButtonBuilder != null
+                    ? widget.sendButtonBuilder!(
+                        context,
+                        _sending ? () {} : _send,
+                        _sending,
+                      )
+                    : SizedBox(
+                        height: 40,
+                        width: 40,
+                        child: IconButton.filled(
+                          onPressed: _sending ? null : _send,
+                          tooltip: l10n?.sendTooltip,
+                          icon: _sending
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.send),
+                        ),
+                      ),
+              ],
             ),
-            SizedBox(width: (t.spacing ?? 8) / 2),
-            widget.sendButtonBuilder != null
-                ? widget.sendButtonBuilder!(
-                    context,
-                    _sending ? () {} : _send,
-                    _sending,
-                  )
-                : SizedBox(
-                    height: 40,
-                    width: 40,
-                    child: IconButton.filled(
-                      onPressed: _sending ? null : _send,
-                      tooltip: l10n?.sendTooltip,
-                      icon: _sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send),
-                    ),
-                  ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -914,13 +1307,17 @@ class _CommentsListState extends State<CommentsList>
     if (widget.separatorBuilder == null) {
       final spacing = GvlCommentsTheme.of(context).spacing ?? 8;
       return SizedBox(
-        height: spacing * 0.75,
+        height: spacing * 0.25,
       );
     }
     return widget.separatorBuilder!(context);
   }
 
   Widget _buildLoadMoreRow(BuildContext context) {
+    if (widget.loadMoreButtonBuilder != null) {
+      return widget.loadMoreButtonBuilder!(context, _loadMore, _loadingMore);
+    }
+
     final t = GvlCommentsTheme.of(context);
     final l10n = GvlCommentsL10n.of(context);
 
@@ -975,6 +1372,12 @@ class _DefaultCommentItem extends StatelessWidget {
   /// If `reaction` is `null`, the current reaction should be removed.
   final Future<void> Function(CommentModel comment, String? reaction)? onReact;
 
+  /// Called when the user taps the reply button.
+  final VoidCallback? onReply;
+
+  /// Full flat list of comments, used to resolve @mention display names.
+  final List<CommentModel> allComments;
+
   const _DefaultCommentItem({
     required this.comment,
     required this.isMine,
@@ -982,7 +1385,19 @@ class _DefaultCommentItem extends StatelessWidget {
     this.isSending = false,
     this.reactionsEnabled = true,
     this.onReact,
+    this.onReply,
+    this.allComments = const [],
   });
+
+  /// Resolves a display name from a user ID by looking up [allComments].
+  String _resolveDisplayName(String userId) {
+    for (final c in allComments) {
+      if (c.externalUserId == userId && c.authorName != null) {
+        return c.authorName!;
+      }
+    }
+    return userId;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1012,6 +1427,11 @@ class _DefaultCommentItem extends StatelessWidget {
         t.timestampStyle ?? text.bodySmall ?? const TextStyle(fontSize: 11);
     final tsColor =
         (t.timestampStyle?.color ?? cs.onSurfaceVariant).withAlpha(180);
+    final metaStyle = tsBase.copyWith(
+      fontSize: (tsBase.fontSize ?? 11) - 1,
+      color: tsColor,
+      letterSpacing: (tsBase.letterSpacing ?? 0) + 0.1,
+    );
 
     Widget? avatar;
     if (showAvatars) {
@@ -1019,7 +1439,8 @@ class _DefaultCommentItem extends StatelessWidget {
         avatar = avatarBuilder!(context, comment, avatarSize);
       } else {
         final name = comment.authorName ?? comment.externalUserId;
-        final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+        final initial =
+            name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
         final avatarUrl = comment.avatarUrl?.trim();
 
         avatar = (avatarUrl != null && avatarUrl.isNotEmpty)
@@ -1043,123 +1464,173 @@ class _DefaultCommentItem extends StatelessWidget {
       }
     }
 
-    final bubbleCore = Opacity(
-      opacity: isSending ? 0.55 : 1.0,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Material(
-            color: bg,
-            elevation: t.elevation ?? 0,
-            shape: RoundedRectangleBorder(
-              borderRadius:
-                  t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Padding(
-                // Add a tiny extra bottom padding so the overlay doesn't feel cramped.
-                padding: EdgeInsets.fromLTRB(
-                  (t.spacing ?? 8) + 4,
-                  (t.spacing ?? 8) + 4,
-                  (t.spacing ?? 8) + 4,
-                  (t.spacing ?? 8) + 10,
+    // --- Compact bubble (Facebook-style) ---
+    final bubbleContent = Material(
+      color: bg,
+      elevation: t.elevation ?? 0,
+      shape: RoundedRectangleBorder(
+        borderRadius:
+            t.bubbleRadius ?? const BorderRadius.all(Radius.circular(12)),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                comment.authorName ?? comment.externalUserId,
+                style: t.authorStyle ??
+                    text.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+              ),
+              const SizedBox(height: 2),
+              // @mention for flattened depth-2 replies
+              if (comment.replyToUserId != null &&
+                  comment.isVisibleNormally) ...[
+                Text(
+                  '@${_resolveDisplayName(comment.replyToUserId!)}',
+                  style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      comment.authorName ?? comment.externalUserId,
-                      style: t.authorStyle ??
-                          text.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                    ),
-                    const SizedBox(height: 4),
-                    LinkedText(
-                      _commentDisplayText(comment, l10n),
-                      style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                        fontStyle: comment.isVisibleNormally
-                            ? FontStyle.normal
-                            : FontStyle.italic,
-                      ),
-                      linkStyle: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
-                        decoration: TextDecoration.underline,
-                        fontStyle: comment.isVisibleNormally
-                            ? FontStyle.normal
-                            : FontStyle.italic,
-                      ),
-                    )
-                    // Removed timestamp from inside bubble
-                  ],
+                const SizedBox(height: 2),
+              ],
+              LinkedText(
+                _commentDisplayText(comment, l10n),
+                style: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                  fontStyle: comment.isVisibleNormally
+                      ? FontStyle.normal
+                      : FontStyle.italic,
+                ),
+                linkStyle: (t.bodyStyle ?? text.bodyMedium)?.copyWith(
+                  decoration: TextDecoration.underline,
+                  fontStyle: comment.isVisibleNormally
+                      ? FontStyle.normal
+                      : FontStyle.italic,
                 ),
               ),
-            ),
+            ],
           ),
-
-          // Overlay the reaction bar on the bottom-right of the bubble.
-          // It auto-hides when there are no reactions.
-          if (reactionsEnabled)
-            Positioned(
-              right: 10,
-              bottom: -10,
-              child: IgnorePointer(
-                ignoring: isSending,
-                child: CommentReactionsBar(
-                  comment: comment,
-                  enabled: !isSending,
-                  onReact: (reaction) {
-                    onReact?.call(comment, reaction);
-                  },
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
 
-    // Messenger-like interactions:
-    // - Long-press the bubble to open the reaction picker (even if the bar is hidden).
-    // - Double-tap the bubble to quickly toggle a "like".
-    final bubble = GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onLongPress: (!isSending && reactionsEnabled && onReact != null)
-          ? () async {
-              final box = context.findRenderObject() as RenderBox?;
-              if (box == null) return;
+    final bubbleWidget = Opacity(
+      opacity: isSending ? 0.55 : 1.0,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onLongPress: (!isSending && reactionsEnabled && onReact != null)
+            ? () async {
+                final box = context.findRenderObject() as RenderBox?;
+                if (box == null) return;
 
-              final pos = box.localToGlobal(Offset.zero);
-              final size = box.size;
+                final pos = box.localToGlobal(Offset.zero);
+                final size = box.size;
 
-              final anchor =
-                  Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
-              final picked = await showCommentReactionPicker(context,
-                  currentReaction: comment.viewerReaction,
-                  anchor: Offset(anchor.left, anchor.bottom));
-              if (picked == null) return;
+                final anchor =
+                    Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
+                final picked = await showCommentReactionPicker(context,
+                    currentReaction: comment.viewerReaction,
+                    anchor: Offset(anchor.left, anchor.bottom));
+                if (picked == null) return;
 
-              // Toggle behavior: selecting the same reaction clears it.
-              final next = (picked == comment.viewerReaction) ? null : picked;
-              await onReact!(comment, next);
-            }
-          : null,
-      onDoubleTap: (!isSending && reactionsEnabled && onReact != null)
-          ? () async {
-              final current = comment.viewerReaction;
-              final next = (current == 'love') ? null : 'love';
-              await onReact!(comment, next);
-            }
-          : null,
-      child: bubbleCore,
+                final next =
+                    (picked == comment.viewerReaction) ? null : picked;
+                await onReact!(comment, next);
+              }
+            : null,
+        onDoubleTap: (!isSending && reactionsEnabled && onReact != null)
+            ? () async {
+                final current = comment.viewerReaction;
+                final next = (current == 'love') ? null : 'love';
+                await onReact!(comment, next);
+              }
+            : null,
+        child: bubbleContent,
+      ),
     );
+
+    // --- Meta row: timestamp · Reply · [reactions]    [like button] ---
+    final hasReactions = comment.reactionTotal > 0;
+    final counts = comment.reactionCounts;
+    final viewer = comment.viewerReaction;
+
+    // Build inline reaction summary (e.g. "❤️ 😮 3")
+    Widget? reactionSummary;
+    if (hasReactions) {
+      final top = _topInlineReactions(counts, max: 3);
+      reactionSummary = GestureDetector(
+        onTap: (!isSending && reactionsEnabled && onReact != null)
+            ? () async {
+                final box = context.findRenderObject() as RenderBox?;
+                if (box == null) return;
+                final pos = box.localToGlobal(Offset.zero);
+                final size = box.size;
+                final picked = await showCommentReactionPicker(context,
+                    currentReaction: viewer,
+                    anchor: Offset(pos.dx + size.width / 2, pos.dy));
+                if (picked == null) return;
+                final next = (picked == viewer) ? null : picked;
+                await onReact!(comment, next);
+              }
+            : null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final r in top)
+              Padding(
+                padding: const EdgeInsets.only(right: 1),
+                child: Text(
+                  _inlineEmojiFor(r.id),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            const SizedBox(width: 3),
+            Text('${comment.reactionTotal}', style: metaStyle),
+          ],
+        ),
+      );
+    }
+
+    // Like/react affordance: only shown when user has NOT reacted yet.
+    // Once reacted, their emoji is already visible in the reaction summary.
+    Widget? likeButton;
+    final hasViewer = viewer != null && viewer.isNotEmpty;
+    if (reactionsEnabled && onReact != null && !isSending && !hasViewer) {
+      likeButton = _ReactionAffordance(
+        hasReaction: false,
+        viewerEmoji: null,
+        onTap: () {
+          onReact!(comment, 'like');
+        },
+        onLongPress: () async {
+          final box = context.findRenderObject() as RenderBox?;
+          if (box == null) return;
+          final pos = box.localToGlobal(Offset.zero);
+          final size = box.size;
+          final picked = await showCommentReactionPicker(context,
+              currentReaction: viewer,
+              anchor: Offset(pos.dx + size.width, pos.dy));
+          if (picked == null) return;
+          final next = (picked == viewer) ? null : picked;
+          await onReact!(comment, next);
+        },
+      );
+    }
 
     final baseSpacing = t.spacing ?? 8;
     return Padding(
       padding: EdgeInsets.symmetric(
-        vertical: baseSpacing + 2,
+        vertical: 4,
         horizontal: baseSpacing,
       ),
       child: Row(
@@ -1167,7 +1638,7 @@ class _DefaultCommentItem extends StatelessWidget {
         children: [
           if (avatar != null) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: 2),
               child: SizedBox(
                 width: avatarSize,
                 height: avatarSize,
@@ -1179,29 +1650,134 @@ class _DefaultCommentItem extends StatelessWidget {
             ),
             SizedBox(width: t.spacing ?? 8),
           ],
-          // Make the bubble side flexible so it can shrink on narrow screens.
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                bubble,
-                const SizedBox(height: 3),
+                bubbleWidget,
+                const SizedBox(height: 2),
+                // Meta row
                 Padding(
-                  padding: EdgeInsets.only(left: baseSpacing),
-                  child: Text(
-                    relativeTime,
-                    style: tsBase.copyWith(
-                      fontSize: (tsBase.fontSize ?? 11) - 1,
-                      color: tsColor,
-                      letterSpacing: (tsBase.letterSpacing ?? 0) + 0.1,
-                    ),
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Row(
+                    children: [
+                      // Timestamp
+                      Text(relativeTime, style: metaStyle),
+                      // Reply
+                      if (onReply != null && !isSending) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text('·', style: metaStyle),
+                        ),
+                        GestureDetector(
+                          onTap: onReply,
+                          child: Text(
+                            l10n?.replyLabel ?? 'Reply',
+                            style: metaStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Like affordance (right after Reply)
+                      if (likeButton != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text('·', style: metaStyle),
+                        ),
+                        likeButton,
+                      ],
+                      // Inline reactions summary
+                      if (reactionSummary != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text('·', style: metaStyle),
+                        ),
+                        reactionSummary,
+                      ],
+                    ],
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Inline helper to get top reactions by count (used in meta row).
+class _InlineReaction {
+  final String id;
+  final int count;
+  const _InlineReaction(this.id, this.count);
+}
+
+List<_InlineReaction> _topInlineReactions(Map<String, int> counts,
+    {int max = 3}) {
+  final items = <_InlineReaction>[];
+  counts.forEach((key, value) {
+    if (value > 0) items.add(_InlineReaction(key, value));
+  });
+  items.sort((a, b) {
+    final c = b.count.compareTo(a.count);
+    if (c != 0) return c;
+    return a.id.compareTo(b.id);
+  });
+  if (items.length <= max) return items;
+  return items.sublist(0, max);
+}
+
+/// Maps reaction id to emoji for inline display.
+String _inlineEmojiFor(String id) {
+  const map = {
+    'like': '👍',
+    'love': '❤️',
+    'laugh': '😂',
+    'wow': '😮',
+    'sad': '😢',
+    'angry': '😡',
+  };
+  return map[id] ?? '👍';
+}
+
+/// Facebook-style like/react affordance button shown on the right of the
+/// meta row. Tap to toggle like, long-press to open the reaction picker.
+class _ReactionAffordance extends StatelessWidget {
+  final bool hasReaction;
+  final String? viewerEmoji;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _ReactionAffordance({
+    required this.hasReaction,
+    this.viewerEmoji,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: hasReaction
+            ? Text(
+                viewerEmoji ?? '👍',
+                style: const TextStyle(fontSize: 16),
+              )
+            : Icon(
+                Icons.thumb_up_outlined,
+                size: 16,
+                color: cs.onSurfaceVariant.withAlpha(160),
+              ),
       ),
     );
   }
@@ -1282,6 +1858,16 @@ typedef ComposerBuilder = Widget Function(
   required int maxLines,
   required String hintText,
 });
+
+/// Signature for building the "load more" / "load previous comments" button.
+///
+/// The builder receives [onPressed] to trigger pagination and [isLoading]
+/// to show a spinner while fetching.
+typedef LoadMoreButtonBuilder = Widget Function(
+  BuildContext context,
+  VoidCallback onPressed,
+  bool isLoading,
+);
 
 /// Theme extension used to style the comments list and composer.
 @immutable
@@ -1663,14 +2249,6 @@ class GvlCommentsStrings {
     required this.send,
     required this.hintAddComment,
   });
-
-  /// French localization for the built-in strings.
-  factory GvlCommentsStrings.fr() => const GvlCommentsStrings(
-        errorTitle: 'Erreur',
-        retry: 'Réessayer',
-        send: 'Envoyer',
-        hintAddComment: 'Ajouter un commentaire…',
-      );
 
   /// English localization for the built-in strings.
   factory GvlCommentsStrings.en() => const GvlCommentsStrings(

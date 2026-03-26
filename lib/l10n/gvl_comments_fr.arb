@@ -1,0 +1,57 @@
+{
+  "@@locale": "fr",
+  "retryTooltip": "Réessayer",
+  "sendTooltip": "Envoyer",
+  "addCommentHint": "Ajouter un commentaire…",
+  "signInToCommentHint": "Connectez-vous pour commenter",
+  "reportSentLabel": "Signalement envoyé",
+  "reportErrorLabel": "Erreur lors du signalement",
+  "reportLabel": "Signaler",
+  "alreadyReportedLabel": "Vous avez déjà signalé ce commentaire",
+  "reportedPlaceholderLabel": "⚠ Ce commentaire a été signalé",
+  "moderatedPlaceholderLabel": "⚠ Ce commentaire a été modéré",
+  "loadPreviousCommentsLabel": "Charger les commentaires précédents",
+  "timeJustNow": "À l'instant",
+  "timeOneMinute": "Il y a 1 min",
+  "timeXMinutes": "Il y a {m} min",
+  "timeOneHour": "Il y a 1h",
+  "timeXHours": "Il y a {h}h",
+  "timeYesterday": "Hier",
+  "timeXDays": "Il y a {d} jours",
+  "timeFallbackDate": "{d}/{m}/{y}",
+  "errorTitle": "Erreur",
+  "retryLabel": "Réessayer",
+  "genericErrorLabel": "Une erreur est survenue.",
+  "networkErrorLabel": "Erreur réseau. Vérifiez votre connexion et réessayez.",
+  "unauthorizedErrorLabel": "Erreur d'authentification. Veuillez vous reconnecter.",
+  "timeoutErrorLabel": "La requête a expiré. Veuillez réessayer.",
+  "detailsLabel": "Détails",
+  "copyLabel": "Copier",
+  "copiedLabel": "Copié",
+  "replyLabel": "Répondre",
+  "replyingToLabel": "Réponse à {name}",
+  "@replyingToLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "replyHint": "Répondre à {name}…",
+  "@replyHint": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "cancelReplyTooltip": "Annuler la réponse",
+  "seeMoreReplies": "Voir {count} {count, plural, =1{réponse} other{réponses}} de plus",
+  "@seeMoreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reactionLike": "J'aime",
+  "reactionLove": "J'adore",
+  "reactionLaugh": "Haha",
+  "reactionWow": "Waouh",
+  "reactionSad": "Triste",
+  "reactionAngry": "Grr"
+}

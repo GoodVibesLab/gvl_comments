@@ -3,6 +3,7 @@
   "retryTooltip": "Retry",
   "sendTooltip": "Send",
   "addCommentHint": "Add a comment…",
+  "signInToCommentHint": "Sign in to comment",
   "reportSentLabel": "Report sent",
   "reportErrorLabel": "Error sending report",
   "reportLabel": "Report",
@@ -26,5 +27,31 @@
   "timeoutErrorLabel": "Request timed out. Please try again.",
   "detailsLabel": "Details",
   "copyLabel": "Copy",
-  "copiedLabel": "Copied"
+  "copiedLabel": "Copied",
+  "replyLabel": "Reply",
+  "replyingToLabel": "Replying to {name}",
+  "@replyingToLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "replyHint": "Reply to {name}…",
+  "@replyHint": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "cancelReplyTooltip": "Cancel reply",
+  "seeMoreReplies": "See {count} more {count, plural, =1{reply} other{replies}}",
+  "@seeMoreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reactionLike": "Like",
+  "reactionLove": "Love",
+  "reactionLaugh": "Haha",
+  "reactionWow": "Wow",
+  "reactionSad": "Sad",
+  "reactionAngry": "Angry"
 }

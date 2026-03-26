@@ -1,6 +1,11 @@
 name: gvl_comments
 description: Add a comments section to any Flutter app (UI + managed backend). No Firebase/Supabase setup—just an install key.
-version: 0.9.7
+version: 1.0.0
+topics:
+  - comments
+  - moderation
+  - saas
+  - ui
 homepage: https://goodvibeslab.cloud
 repository: https://github.com/GoodVibesLab/gvl_comments
 issue_tracker: https://github.com/GoodVibesLab/gvl_comments/issues

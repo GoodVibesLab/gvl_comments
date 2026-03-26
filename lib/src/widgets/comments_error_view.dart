@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -43,17 +44,11 @@ class CommentsErrorView extends StatelessWidget {
     final info = _CommentsErrorInfo.from(error);
 
     final spacing = (t.spacing ?? 8) * (compact ? 0.8 : 1.0);
-    final titleStyle =
-        (t.errorStyle ?? tt.titleMedium ?? const TextStyle()).copyWith(
-      fontWeight: FontWeight.w700,
-      color: t.errorColor ?? cs.error,
-    );
     final bodyStyle = (tt.bodyMedium ?? const TextStyle()).copyWith(
       color: cs.onSurfaceVariant,
       height: 1.2,
     );
 
-    final title = l10n?.errorTitle ?? 'Error';
     final retryLabel = l10n?.retryLabel ?? 'Retry';
 
     final userMessage = _pickUserMessage(
@@ -68,81 +63,61 @@ class CommentsErrorView extends StatelessWidget {
       threadKey: threadKey,
     );
 
+    // Technical details (code pill, details panel) are only shown in
+    // debug builds. End-users in release see a clean, friendly message.
+    final isDebug = kDebugMode;
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: EdgeInsets.all(spacing * 2),
-          child: Material(
-            color: cs.surface,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: cs.outlineVariant.withAlpha(160),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.chat_bubble_outline,
+                color: cs.onSurfaceVariant.withAlpha(120),
+                size: compact ? 28 : 34,
               ),
-            ),
-            child: Padding(
-              padding: EdgeInsets.all(spacing * 2),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: t.errorColor ?? cs.error,
-                    size: compact ? 28 : 34,
-                  ),
-                  SizedBox(height: spacing),
-                  Text(
-                    title,
-                    style: titleStyle,
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: spacing),
-                  Text(
-                    userMessage,
-                    style: bodyStyle,
-                    textAlign: TextAlign.center,
-                  ),
-                  if (codeLine != null) ...[
-                    SizedBox(height: spacing),
-                    _CodePill(
-                      text: codeLine,
-                      onCopy: () async {
-                        await Clipboard.setData(ClipboardData(text: codeLine));
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              l10n?.copiedLabel ?? 'Copied',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                  SizedBox(height: spacing * 1.5),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: onRetry,
-                        icon: const Icon(Icons.refresh),
-                        label: Text(retryLabel),
+              SizedBox(height: spacing),
+              Text(
+                userMessage,
+                style: bodyStyle,
+                textAlign: TextAlign.center,
+              ),
+              if (isDebug && codeLine != null) ...[
+                SizedBox(height: spacing),
+                _CodePill(
+                  text: codeLine,
+                  onCopy: () async {
+                    await Clipboard.setData(ClipboardData(text: codeLine));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          l10n?.copiedLabel ?? 'Copied',
+                        ),
                       ),
-                    ],
-                  ),
-                  if (showDetails) ...[
-                    SizedBox(height: spacing),
-                    _DetailsPanel(
-                      title: l10n?.detailsLabel ?? 'Details',
-                      details: detailsText,
-                      compact: compact,
-                    ),
-                  ],
-                ],
+                    );
+                  },
+                ),
+              ],
+              SizedBox(height: spacing * 1.5),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(retryLabel),
               ),
-            ),
+              if (isDebug && showDetails) ...[
+                SizedBox(height: spacing),
+                _DetailsPanel(
+                  title: l10n?.detailsLabel ?? 'Details',
+                  details: detailsText,
+                  compact: compact,
+                ),
+              ],
+            ],
           ),
         ),
       ),

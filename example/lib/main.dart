@@ -90,27 +90,95 @@ class _DemoHomeState extends State<DemoHome> {
     setState(() => _user = newUser);
   }
 
+  void _openComments() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _CommentsScreen(user: _user, onReroll: _rerollGuest),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('GVL Comments · Flutter'),
+        elevation: 0,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 32,
+              backgroundImage: NetworkImage(_user.avatarUrl ?? ''),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _user.name ?? 'Guest',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: _openComments,
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Open Comments'),
+            ),
+            const SizedBox(height: 8),
+            CommentCount(
+              threadKey: _demoThreadKey,
+              user: _user,
+              builder: (context, count, refresh) {
+                return Text(
+                  '$count comment${count == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _rerollGuest,
+              icon: const Icon(Icons.casino),
+              label: const Text('New Guest Identity'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentsScreen extends StatelessWidget {
+  final UserProfile user;
+  final VoidCallback onReroll;
+
+  const _CommentsScreen({required this.user, required this.onReroll});
+
   @override
   Widget build(BuildContext context) {
     final theme = GvlCommentsThemeData.bubble(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('GVL Comments · Flutter'),
+        title: const Text('Comments'),
         elevation: 0,
         actions: [
           IconButton(
             tooltip: 'New guest',
             icon: const Icon(Icons.casino),
-            onPressed: _rerollGuest,
+            onPressed: () {
+              onReroll();
+              Navigator.of(context).pop();
+            },
           ),
         ],
       ),
       body: CommentsList(
         threadKey: _demoThreadKey,
         limit: 10,
-        user: _user,
+        user: user,
         newestAtBottom: true,
+        showBranding: true,
         theme: theme,
       ),
     );

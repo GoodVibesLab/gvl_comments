@@ -1,0 +1,22 @@
+# Build artifacts
+build/
+.dart_tool/
+
+# IDE
+.idea/
+*.iml
+
+# Example app (pub.dev doesn't need the full app)
+example/build/
+example/.dart_tool/
+example/android/.gradle/
+example/ios/Pods/
+example/ios/.symlinks/
+
+# Tests (published separately)
+test/
+
+# CI / internal
+CLAUDE.md
+.github/
+sync-from-monorepo.sh

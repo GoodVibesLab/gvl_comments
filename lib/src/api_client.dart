@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+/// Default timeout for all HTTP requests made by the SDK.
+const Duration _defaultTimeout = Duration(seconds: 15);
+
 /// Minimal HTTP helper for the Comments SDK.
 class ApiListResponse {
   final List<Map<String, dynamic>> items;
@@ -12,7 +15,10 @@ class ApiClient {
   final http.Client _http;
   final bool _ownsClient;
 
-  ApiClient({http.Client? httpClient})
+  /// Timeout applied to every request. Defaults to 15 seconds.
+  final Duration timeout;
+
+  ApiClient({http.Client? httpClient, this.timeout = _defaultTimeout})
       : _http = httpClient ?? http.Client(),
         _ownsClient = httpClient == null;
 
@@ -25,7 +31,7 @@ class ApiClient {
     Uri url, {
     Map<String, String>? headers,
   }) {
-    return _http.get(url, headers: headers);
+    return _http.get(url, headers: headers).timeout(timeout);
   }
 
   /// Decodes a list JSON response safely.
@@ -47,7 +53,7 @@ class ApiClient {
       url,
       headers: {'Content-Type': 'application/json', ...?headers},
       body: jsonEncode(body),
-    );
+    ).timeout(timeout);
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return {};
@@ -73,7 +79,7 @@ class ApiClient {
     Uri url, {
     Map<String, String>? headers,
   }) async {
-    final res = await _http.get(url, headers: headers);
+    final res = await _http.get(url, headers: headers).timeout(timeout);
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return const [];
@@ -93,7 +99,7 @@ class ApiClient {
     Uri url, {
     Map<String, String>? headers,
   }) async {
-    final res = await _http.get(url, headers: headers);
+    final res = await _http.get(url, headers: headers).timeout(timeout);
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) {
@@ -116,7 +122,7 @@ class ApiClient {
     Uri url, {
     Map<String, String>? headers,
   }) async {
-    final res = await _http.get(url, headers: headers);
+    final res = await _http.get(url, headers: headers).timeout(timeout);
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return {};
       final decoded = jsonDecode(res.body);

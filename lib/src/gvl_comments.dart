@@ -51,6 +51,13 @@ class CommentsKit {
   /// This protects client apps from accidental over-fetching that could lead
   /// to performance issues or excessive memory usage.
   static const int maxPageSize = 100;
+
+  /// Minimum allowed length for a comment body (trimmed).
+  static const int minBodyLength = 1;
+
+  /// Maximum allowed length for a comment body.
+  static const int maxBodyLength = 5000;
+
   static CommentsKit? _instance;
 
   /// Returns the previously initialized singleton instance.
@@ -74,21 +81,22 @@ class CommentsKit {
   late final String _installKeyHash12 =
       sha256.convert(utf8.encode(_config.installKey)).toString().substring(0, 12);
 
-  /// Thread-scoped bearer token (used for list/post on a real thread).
-  final TokenStore _threadTokens = TokenStore();
-
-  /// Meta-scoped bearer token (used for identify/settings/report/react).
+  /// Single bearer token cache (tenant-scoped, not thread-scoped).
   ///
-  /// Keeping this separate prevents "token scoped to different thread" churn
-  /// when meta calls happen before/after opening a real thread.
-  final TokenStore _metaTokens = TokenStore();
+  /// The JWT contains a thread_key claim but no API route ever verifies it
+  /// against the request, so a single token works for all operations
+  /// (list, post, settings, report, react, identify).
+  final TokenStore _tokens = TokenStore();
 
   Future<String>? _authInFlight;
-  Future<String>? _metaAuthInFlight;
   DateTime? _invalidBindingUntil;
 
-  /// The threadKey the current cached *thread* token is scoped to (server-enforced in prod).
-  String? _tokenThreadKey;
+  /// In-memory thread info cache populated by [prefetchThreads].
+  ///
+  /// Keyed by thread_key. No TTL — cleared on [invalidateToken] or
+  /// [clearThreadInfoCache]. Widgets check this before making individual
+  /// API calls.
+  final Map<String, ThreadInfo> _threadInfoCache = {};
 
   /// Latest user passed to identify() when no token was available yet.
   /// Will be replayed automatically after a successful token acquisition.
@@ -135,7 +143,7 @@ class CommentsKit {
   ///
   /// Prefer the thread-scoped plan when available, otherwise fall back to the
   /// meta-scoped plan.
-  String? get currentPlan => _threadTokens.plan ?? _metaTokens.plan;
+  String? get currentPlan => _tokens.plan;
 
   /// Last pagination cursor returned by the API (opaque).
   ///
@@ -182,29 +190,17 @@ class CommentsKit {
     CommentsLogger.info('token cache cleared');
     lastNextCursor = null;
     lastHasMore = false;
-
-    // Clear both caches: thread + meta.
-    _threadTokens.clear();
-    _metaTokens.clear();
-
-    _tokenThreadKey = null;
+    _tokens.clear();
+    _threadInfoCache.clear();
 
     // Intentionally keep _pendingIdentifyUser so a profile update can be
     // replayed once a token is obtained again.
   }
 
-  String _metaThreadKey(String purpose, {String? a, String? b}) {
-    String clean(String s) => s.replaceAll(RegExp(r'[^a-zA-Z0-9:_\-\.]'), '');
-
-    final p = clean(purpose);
-    final aa = clean(a ?? '');
-    final bb = clean(b ?? '');
-
-    final base = 'meta:$p:$_installKeyHash12';
-    if (aa.isEmpty && bb.isEmpty) return base;
-    if (bb.isEmpty) return '$base:$aa';
-    return '$base:$aa:$bb';
-  }
+  /// Synthetic thread key used when requesting a token without a real thread
+  /// (e.g. for settings / report / react before any thread is opened).
+  late final String _syntheticThreadKey =
+      'meta:init:$_installKeyHash12:000000000';
 
   // ===== threadKey validation (strict) =====
 
@@ -277,23 +273,15 @@ class CommentsKit {
   }
   // ===== Internal =====
 
-  Future<String> _getBearer(
-      {required String threadKey, UserProfile? user}) async {
-    final tk = threadKey.trim();
-    if (tk.isEmpty) {
-      throw StateError('threadKey is required to obtain an auth token');
-    }
-
-    final cached = _threadTokens.validBearer();
-    if (cached != null && _tokenThreadKey == tk) {
+  /// Returns a valid bearer token, requesting a new one if needed.
+  ///
+  /// [threadKey] is sent to the token endpoint (required by the API) but is
+  /// NOT used for scoping — the same cached token is reused across threads.
+  Future<String> _getBearer({String? threadKey, UserProfile? user}) async {
+    final cached = _tokens.validBearer();
+    if (cached != null) {
       CommentsLogger.info('auth token cache hit');
       return cached;
-    }
-
-    if (cached != null && _tokenThreadKey != tk) {
-      // The token is scoped to a different thread. Clear it and fetch a new one.
-      CommentsLogger.info('auth token scoped to different thread, refreshing');
-      _threadTokens.clear();
     }
 
     final now = DateTime.now();
@@ -309,6 +297,8 @@ class CommentsKit {
     if (_authInFlight != null) {
       return _authInFlight!;
     }
+
+    final tk = (threadKey ?? _syntheticThreadKey).trim();
 
     CommentsLogger.debug(
         'Preparing headers for token request: ${_redactedTokenHeadersForLogs(_config.tokenHeaders())}');
@@ -342,8 +332,7 @@ class CommentsKit {
         final token = json['access_token'] as String;
         final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
         final plan = json['plan'] as String?;
-        _threadTokens.save(token, expiresIn, plan: plan);
-        _tokenThreadKey = tk;
+        _tokens.save(token, expiresIn, plan: plan);
         CommentsLogger.info(
             'auth token received (expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})');
 
@@ -364,8 +353,6 @@ class CommentsKit {
               DateTime.now().add(const Duration(seconds: 60));
           CommentsLogger.info('invalid_binding detected, cooling down for 60s');
 
-          // Throw a stable typed exception so callers can branch without
-          // relying on string parsing.
           throw CommentsAuthException(
             'invalid_binding',
             message:
@@ -393,7 +380,7 @@ class CommentsKit {
   }) async {
     late final String bearer;
     try {
-      bearer = await _getMetaBearer(purpose: 'settings', user: user);
+      bearer = await _getBearer(user: user);
     } catch (_) {
       CommentsLogger.info(
           'skipping moderation settings load due to auth failure');
@@ -419,7 +406,7 @@ class CommentsKit {
   /// [limit] controls the maximum number of comments to retrieve per call. Throws when network calls fail.
   Future<List<CommentModel>> listByThreadKey(
     String threadKey, {
-    required UserProfile user,
+    UserProfile? user,
     int limit = defaultPageSize,
     String? before,
     String? cursor,
@@ -472,6 +459,154 @@ class CommentsKit {
     }
   }
 
+  /// Fetches the most engaged comment for a thread.
+  ///
+  /// Returns the single comment with the highest engagement (reaction count),
+  /// or `null` if the thread has no approved comments.
+  ///
+  /// This is useful for "highlight" UIs where you want to show a single
+  /// representative comment below a post or article.
+  Future<CommentModel?> topComment(
+    String threadKey, {
+    required UserProfile user,
+  }) async {
+    try {
+      _assertStrictThreadKey(threadKey);
+
+      // Check prefetch cache first
+      final cached = _threadInfoCache[threadKey];
+      if (cached != null) {
+        CommentsLogger.info('top comment cache hit');
+        return cached.topComment;
+      }
+
+      final bearer = await _getBearer(threadKey: threadKey, user: user);
+      CommentsLogger.info('loading top comment');
+
+      final url = _config.apiBase
+          .resolve('comments/top')
+          .replace(queryParameters: {'thread': threadKey});
+
+      final res = await _http.getRaw(
+        url,
+        headers: {'Authorization': 'Bearer $bearer'},
+      );
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw StateError('HTTP ${res.statusCode}: ${res.body}');
+      }
+
+      // The API returns the comment JSON object directly, or JSON null.
+      if (res.body.isEmpty || res.body == 'null') return null;
+
+      final decoded = json.decode(res.body);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      return CommentModel.fromJson(decoded);
+    } catch (e, stack) {
+      if (e is CommentsAuthException) {
+        CommentsLogger.error('failed to load top comment: $e');
+        rethrow;
+      }
+
+      if (!kReleaseMode) {
+        debugPrintStack(stackTrace: stack);
+      }
+      CommentsLogger.error('failed to load top comment: $e');
+      throw StateError('Failed to load top comment: $e');
+    }
+  }
+
+  /// Clears the prefetched thread info cache.
+  ///
+  /// Call this when thread data may have changed (e.g. after posting a
+  /// comment or switching user context).
+  void clearThreadInfoCache() {
+    _threadInfoCache.clear();
+  }
+
+  /// Batch-fetches thread info (count + top comment) for multiple threads.
+  ///
+  /// Results are stored in an in-memory cache that [topComment],
+  /// [commentCount], [TopComment], and [CommentCount] widgets read from
+  /// before making individual API calls.
+  ///
+  /// Ideal for ListView performance: call this once with all visible
+  /// thread keys, then let each widget read from cache instantly.
+  ///
+  /// ```dart
+  /// await CommentsKit.I().prefetchThreads(
+  ///   ['post:abc-123', 'post:def-456'],
+  ///   user: currentUser,
+  /// );
+  /// // TopComment and CommentCount widgets now render instantly
+  /// ```
+  Future<Map<String, ThreadInfo>> prefetchThreads(
+    List<String> threadKeys, {
+    required UserProfile user,
+  }) async {
+    if (threadKeys.isEmpty) return const {};
+
+    for (final tk in threadKeys) {
+      _assertStrictThreadKey(tk);
+    }
+
+    final bearer = await _getBearer(user: user);
+    CommentsLogger.info(
+        'prefetching thread info for ${threadKeys.length} threads');
+
+    final url = _config.apiBase
+        .resolve('threads/info')
+        .replace(queryParameters: {'threads': threadKeys.join(',')});
+
+    final res = await _http.getRaw(
+      url,
+      headers: {'Authorization': 'Bearer $bearer'},
+    );
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw StateError('HTTP ${res.statusCode}: ${res.body}');
+    }
+
+    final decoded = json.decode(res.body);
+    if (decoded is! List) return const {};
+
+    final result = <String, ThreadInfo>{};
+    for (final item in decoded) {
+      if (item is Map<String, dynamic>) {
+        final threadKey = item['thread_key'] as String?;
+        if (threadKey != null) {
+          final info = ThreadInfo.fromJson(item);
+          result[threadKey] = info;
+          _threadInfoCache[threadKey] = info;
+        }
+      }
+    }
+
+    CommentsLogger.info('prefetched ${result.length} thread infos');
+    return result;
+  }
+
+  /// Returns the approved comment count for a thread.
+  ///
+  /// Reads from cache if [prefetchThreads] was called for this thread,
+  /// otherwise makes a single API call.
+  Future<int> commentCount(
+    String threadKey, {
+    required UserProfile user,
+  }) async {
+    // Check cache first
+    final cached = _threadInfoCache[threadKey];
+    if (cached != null) {
+      CommentsLogger.info('comment count cache hit');
+      return cached.count;
+    }
+
+    // Fallback: single-thread fetch via the batch endpoint
+    final result = await prefetchThreads([threadKey], user: user);
+    return result[threadKey]?.count ?? 0;
+  }
+
   /// Posts a new comment in the specified thread.
   ///
   /// The comment body is sent as-is; perform validation in your UI before
@@ -481,10 +616,12 @@ class CommentsKit {
   Future<CommentModel> post({
     required String threadKey,
     required String body,
-    required UserProfile user,
+    UserProfile? user,
+    String? parentId,
   }) async {
     _assertStrictThreadKey(threadKey);
-    CommentsLogger.info('posting comment');
+    CommentsLogger.info(
+        'posting comment${parentId != null ? ' (reply to $parentId)' : ''}');
     final bearer = await _getBearer(threadKey: threadKey, user: user);
     try {
       final json = await _http.postJson(
@@ -492,10 +629,12 @@ class CommentsKit {
         {
           'threadKey': threadKey,
           'body': body,
+          if (parentId != null) 'parentId': parentId,
         },
         headers: {'Authorization': 'Bearer $bearer'},
       );
       CommentsLogger.info('comment posted');
+      _threadInfoCache.remove(threadKey);
       return CommentModel.fromJson(json);
     } catch (e) {
       CommentsLogger.error('failed to post comment: $e');
@@ -509,10 +648,10 @@ class CommentsKit {
   /// (duplicate), `false` if the report was freshly recorded by the backend.
   Future<bool> report({
     required String commentId,
-    required UserProfile user,
+    UserProfile? user,
     String? reason,
   }) async {
-    final bearer = await _getMetaBearer(purpose: 'report', user: user);
+    final bearer = await _getBearer(user: user);
     CommentsLogger.info('reporting comment');
     Map<String, dynamic> json;
     try {
@@ -545,10 +684,10 @@ class CommentsKit {
   /// fails.
   Future<void> setCommentReaction({
     required String commentId,
-    required UserProfile user,
+    UserProfile? user,
     required String? reaction,
   }) async {
-    final bearer = await _getMetaBearer(purpose: 'react', user: user);
+    final bearer = await _getBearer(user: user);
     CommentsLogger.info(
         'setting reaction comment=$commentId reaction=${reaction ?? "(clear)"}');
 
@@ -589,7 +728,7 @@ class CommentsKit {
 
     _identifyInFlight = () async {
       try {
-        final token = _threadTokens.validBearer() ?? _metaTokens.validBearer();
+        final token = _tokens.validBearer();
         if (token == null) return;
         CommentsLogger.info('identify user=${_safeUserId(user.id)}');
         await _identifyWithToken(token, user);
@@ -609,102 +748,6 @@ class CommentsKit {
     return _identifyInFlight!;
   }
 
-  /// Returns a bearer suitable for meta operations (identify/settings/report/react).
-  ///
-  /// This does NOT affect the thread-scoped token cache.
-  Future<String> _getMetaBearer({required String purpose, UserProfile? user}) async {
-    final cached = _metaTokens.validBearer();
-    if (cached != null) {
-      CommentsLogger.info('meta auth token cache hit');
-      return cached;
-    }
-
-    final now = DateTime.now();
-    if (_invalidBindingUntil != null && now.isBefore(_invalidBindingUntil!)) {
-      CommentsLogger.info('auth blocked (invalid_binding cooldown active)');
-      throw CommentsAuthException(
-        'invalid_binding',
-        message: 'This API key requires a valid app binding (signature/origin).',
-      );
-    }
-
-    if (_metaAuthInFlight != null) {
-      return _metaAuthInFlight!;
-    }
-
-    // Use a deterministic high-entropy meta thread key so the backend can scope
-    // JWT claims / RLS consistently without requiring a real content thread.
-    final metaThreadKey = _metaThreadKey(purpose, a: user?.id);
-
-    CommentsLogger.debug(
-      'Preparing headers for meta token request: ${_redactedTokenHeadersForLogs(_config.tokenHeaders())}',
-    );
-
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      ..._config.tokenHeaders(),
-    };
-
-    final body = <String, dynamic>{
-      'apiKey': _config.installKey,
-      'threadKey': metaThreadKey,
-      if (user != null)
-        'externalUser': {
-          'id': user.id,
-          if (user.name != null) 'name': user.name,
-          if (user.avatarUrl != null) 'avatarUrl': user.avatarUrl,
-        },
-    };
-
-    CommentsLogger.info('requesting meta auth token (purpose=$purpose)');
-
-    _metaAuthInFlight = () async {
-      try {
-        final json = await _http.postJson(
-          _config.apiBase.resolve('token'),
-          body,
-          headers: headers,
-        );
-
-        final token = json['access_token'] as String;
-        final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
-        final plan = json['plan'] as String?;
-
-        _metaTokens.save(token, expiresIn, plan: plan);
-
-        CommentsLogger.info(
-          'meta auth token received (purpose=$purpose, expiresIn=${expiresIn}s, plan=${plan ?? "unknown"})',
-        );
-
-        // If we had a pending identify, replay now in the background.
-        // Do not await: keep callers fast.
-        _flushPendingIdentifyIfAny().ignore();
-
-        return token;
-      } catch (e) {
-        CommentsLogger.error(
-          'failed to obtain meta auth token. Check your install key at https://goodvibeslab.cloud '
-          '(key=${_safeKeyPrefix(_config.installKey)}): $e',
-        );
-
-        final msg = e.toString();
-        if (msg.contains('"error":"invalid_binding"') || msg.contains('invalid_binding')) {
-          _invalidBindingUntil = DateTime.now().add(const Duration(seconds: 60));
-          CommentsLogger.info('invalid_binding detected, cooling down for 60s');
-          throw CommentsAuthException(
-            'invalid_binding',
-            message: 'This API key requires a valid app binding (signature/origin).',
-          );
-        }
-        rethrow;
-      } finally {
-        _metaAuthInFlight = null;
-      }
-    }();
-
-    return _metaAuthInFlight!;
-  }
-
   Future<void> _flushPendingIdentifyIfAny() {
     final now = DateTime.now();
     if (_invalidBindingUntil != null && now.isBefore(_invalidBindingUntil!)) {
@@ -714,7 +757,7 @@ class CommentsKit {
     final u = _pendingIdentifyUser;
     if (u == null) return Future.value();
 
-    final token = _threadTokens.validBearer() ?? _metaTokens.validBearer();
+    final token = _tokens.validBearer();
     if (token == null) return Future.value();
 
     if (_identifyInFlight != null) return _identifyInFlight!;

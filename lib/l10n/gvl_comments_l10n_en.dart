@@ -18,6 +18,9 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
   String get addCommentHint => 'Add a comment…';
 
   @override
+  String get signInToCommentHint => 'Sign in to comment';
+
+  @override
   String get reportSentLabel => 'Report sent';
 
   @override
@@ -98,4 +101,49 @@ class GvlCommentsL10nEn extends GvlCommentsL10n {
 
   @override
   String get copiedLabel => 'Copied';
+
+  @override
+  String get replyLabel => 'Reply';
+
+  @override
+  String replyingToLabel(String name) {
+    return 'Replying to $name';
+  }
+
+  @override
+  String replyHint(String name) {
+    return 'Reply to $name…';
+  }
+
+  @override
+  String get cancelReplyTooltip => 'Cancel reply';
+
+  @override
+  String seeMoreReplies(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'replies',
+      one: 'reply',
+    );
+    return 'See $count more $_temp0';
+  }
+
+  @override
+  String get reactionLike => 'Like';
+
+  @override
+  String get reactionLove => 'Love';
+
+  @override
+  String get reactionLaugh => 'Haha';
+
+  @override
+  String get reactionWow => 'Wow';
+
+  @override
+  String get reactionSad => 'Sad';
+
+  @override
+  String get reactionAngry => 'Angry';
 }

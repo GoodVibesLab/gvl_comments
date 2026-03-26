@@ -2,6 +2,41 @@
 
 All notable changes to the **GoodVibesLab Comments Client (Flutter)** package will be documented here.
 
+## 1.0.0
+
+First stable release. The public API is now frozen under semantic versioning.
+
+### Breaking changes
+- **`CommentModel.status`** is now a `CommentStatus` enum. Use `comment.commentStatus` for type-safe comparisons. The legacy `comment.status` getter still returns a `String` for backward compatibility.
+- **`GvlCommentsStrings.fr()` factory removed** — use the l10n system (`GvlCommentsL10n`) for localization instead.
+
+### Added
+- **`TopComment` widget** — displays the single most-engaged comment for a thread. Supports full builder customization (`builder`, `loadingBuilder`, `emptyBuilder`, `errorBuilder`).
+- **`CommentCount` widget** — displays the approved comment count for a thread. Reads from cache when `prefetchThreads` was called (zero latency).
+- **`CommentsKit.prefetchThreads()`** — batch-fetches thread info (count + top comment) for multiple threads. Ideal for feed/list performance.
+- **`CommentsKit.topComment()`** / **`CommentsKit.commentCount()`** — individual API accessors with cache support.
+- **`ThreadInfo` model** — holds prefetched count + top comment data.
+- **`CommentStatus` enum** (`pending`, `approved`, `rejected`) — replaces string constants.
+- **`Reaction` enum** (`like`, `love`, `laugh`, `wow`, `sad`, `angry`) with `id`, `emoji`, and `emojiFor()` helper.
+- **`LoadMoreButtonBuilder`** parameter on `CommentsList` — fully customize the pagination button.
+- **Threaded replies** (depth 2) with `parentId`, `replyToCommentId`, `replyToUserId` on `CommentModel`.
+- **Localized reaction labels** — reaction picker labels (`Like`, `Love`, etc.) now go through `GvlCommentsL10n`.
+- **4 new locales** — German (de), Spanish (es), French (fr), Portuguese (pt) alongside English.
+- **HTTP request timeout** (15 s) on all API calls — prevents indefinite hangs.
+- **Body validation constants** — `CommentsKit.minBodyLength` (1) and `CommentsKit.maxBodyLength` (5000) exposed publicly.
+- **`topics`** field in pubspec.yaml for pub.dev discoverability.
+- **`.pubignore`** to reduce published package size.
+
+### Deprecated
+- **`CommentsClient`** (legacy API) — use `CommentsKit` instead. Will be removed in 2.0.
+- **`Comment`**, **`CommentsExternalUser`**, **`CommentsUserRole`**, **`CommentsApiException`** — use their modern counterparts.
+- **`CommentModel.statusPending/statusApproved/statusRejected`** string constants — use `CommentStatus` enum.
+
+### Fixed
+- iOS podspec had a duplicate `Pod::Spec.new` block (now consolidated).
+- Android `build.gradle` version aligned to `1.0.0`.
+- Hardened user identification flow (from 0.9.7).
+
 ## 0.9.7
 
 ### Fixed

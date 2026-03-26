@@ -1,3 +1,8 @@
+/// Legacy client API — use [CommentsKit] instead.
+///
+/// This file is deprecated and will be removed in a future release.
+/// Migrate to `CommentsKit.initialize()` + `CommentsKit.I()`.
+@Deprecated('Use CommentsKit instead. This legacy client will be removed in 2.0.')
 library;
 
 import 'dart:convert';
@@ -11,6 +16,7 @@ import 'package:meta/meta.dart';
 /// moderating content or listing flagged comments). Use [CommentsUserRole.user]
 /// for regular end-users unless your API key is explicitly scoped for
 /// moderation.
+@Deprecated('Use CommentsKit instead. This legacy client will be removed in 2.0.')
 enum CommentsUserRole {
   /// Regular end-user who can read and publish comments.
   user,
@@ -23,6 +29,7 @@ enum CommentsUserRole {
 }
 
 /// Lightweight description of the end-user interacting with the comment UI.
+@Deprecated('Use UserProfile with CommentsKit instead.')
 class CommentsExternalUser {
   /// Creates an external user representation passed to the backend for JWT
   /// generation.
@@ -53,6 +60,7 @@ class CommentsExternalUser {
 }
 
 /// Immutable representation of a comment returned by the API.
+@Deprecated('Use CommentModel instead.')
 @immutable
 class Comment {
   /// Builds a new [Comment] instance.
@@ -141,6 +149,7 @@ class Comment {
 }
 
 /// Exception thrown when the backend answers with an error payload.
+@Deprecated('Use CommentsAuthException from CommentsKit instead.')
 class CommentsApiException implements Exception {
   /// Builds an exception with the HTTP status code and a stable error code.
   ///
@@ -190,9 +199,13 @@ class _AuthToken {
 
 /// High level client that wraps the HTTP API exposed by the Comments backend.
 ///
+/// **Deprecated** — use [CommentsKit] instead, which provides a simpler
+/// singleton API, thread key validation, reactions, reporting, and prefetching.
+///
 /// The client handles authentication, token caching, and JSON parsing so that
 /// you can focus on rendering comments in your Flutter app. Use a single
 /// instance per user session and call [close] when it is no longer needed.
+@Deprecated('Use CommentsKit instead. This legacy client will be removed in 2.0.')
 class CommentsClient {
   /// Creates a new client configured for your Comments project.
   ///

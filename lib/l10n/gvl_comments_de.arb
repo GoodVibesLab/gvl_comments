@@ -1,0 +1,57 @@
+{
+  "@@locale": "de",
+  "retryTooltip": "Erneut versuchen",
+  "sendTooltip": "Senden",
+  "addCommentHint": "Kommentar hinzufügen…",
+  "signInToCommentHint": "Anmelden zum Kommentieren",
+  "reportSentLabel": "Meldung gesendet",
+  "reportErrorLabel": "Fehler beim Senden der Meldung",
+  "reportLabel": "Melden",
+  "alreadyReportedLabel": "Du hast diesen Kommentar bereits gemeldet",
+  "reportedPlaceholderLabel": "⚠ Dieser Kommentar wurde gemeldet",
+  "moderatedPlaceholderLabel": "⚠ Dieser Kommentar wurde moderiert",
+  "loadPreviousCommentsLabel": "Vorherige Kommentare laden",
+  "timeJustNow": "Gerade eben",
+  "timeOneMinute": "Vor 1 Min.",
+  "timeXMinutes": "Vor {m} Min.",
+  "timeOneHour": "Vor 1 Std.",
+  "timeXHours": "Vor {h} Std.",
+  "timeYesterday": "Gestern",
+  "timeXDays": "Vor {d} Tagen",
+  "timeFallbackDate": "{d}.{m}.{y}",
+  "errorTitle": "Fehler",
+  "retryLabel": "Erneut versuchen",
+  "genericErrorLabel": "Etwas ist schiefgelaufen.",
+  "networkErrorLabel": "Netzwerkfehler. Überprüfe deine Verbindung und versuche es erneut.",
+  "unauthorizedErrorLabel": "Authentifizierungsfehler. Bitte erneut anmelden.",
+  "timeoutErrorLabel": "Zeitüberschreitung. Bitte erneut versuchen.",
+  "detailsLabel": "Details",
+  "copyLabel": "Kopieren",
+  "copiedLabel": "Kopiert",
+  "replyLabel": "Antworten",
+  "replyingToLabel": "Antwort an {name}",
+  "@replyingToLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "replyHint": "Antwort an {name}…",
+  "@replyHint": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "cancelReplyTooltip": "Antwort abbrechen",
+  "seeMoreReplies": "{count} weitere {count, plural, =1{Antwort} other{Antworten}} anzeigen",
+  "@seeMoreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reactionLike": "Gefällt mir",
+  "reactionLove": "Liebe",
+  "reactionLaugh": "Haha",
+  "reactionWow": "Wow",
+  "reactionSad": "Traurig",
+  "reactionAngry": "Wütend"
+}

@@ -5,7 +5,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
+import 'gvl_comments_l10n_de.dart';
 import 'gvl_comments_l10n_en.dart';
+import 'gvl_comments_l10n_es.dart';
+import 'gvl_comments_l10n_fr.dart';
+import 'gvl_comments_l10n_pt.dart';
 
 // ignore_for_file: type=lint
 
@@ -92,7 +96,13 @@ abstract class GvlCommentsL10n {
   ];
 
   /// A list of this localizations delegate's supported locales.
-  static const List<Locale> supportedLocales = <Locale>[Locale('en')];
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('de'),
+    Locale('en'),
+    Locale('es'),
+    Locale('fr'),
+    Locale('pt')
+  ];
 
   /// No description provided for @retryTooltip.
   ///
@@ -111,6 +121,12 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'Add a comment…'**
   String get addCommentHint;
+
+  /// No description provided for @signInToCommentHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to comment'**
+  String get signInToCommentHint;
 
   /// No description provided for @reportSentLabel.
   ///
@@ -255,6 +271,72 @@ abstract class GvlCommentsL10n {
   /// In en, this message translates to:
   /// **'Copied'**
   String get copiedLabel;
+
+  /// No description provided for @replyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get replyLabel;
+
+  /// No description provided for @replyingToLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying to {name}'**
+  String replyingToLabel(String name);
+
+  /// No description provided for @replyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply to {name}…'**
+  String replyHint(String name);
+
+  /// No description provided for @cancelReplyTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel reply'**
+  String get cancelReplyTooltip;
+
+  /// No description provided for @seeMoreReplies.
+  ///
+  /// In en, this message translates to:
+  /// **'See {count} more {count, plural, =1{reply} other{replies}}'**
+  String seeMoreReplies(int count);
+
+  /// No description provided for @reactionLike.
+  ///
+  /// In en, this message translates to:
+  /// **'Like'**
+  String get reactionLike;
+
+  /// No description provided for @reactionLove.
+  ///
+  /// In en, this message translates to:
+  /// **'Love'**
+  String get reactionLove;
+
+  /// No description provided for @reactionLaugh.
+  ///
+  /// In en, this message translates to:
+  /// **'Haha'**
+  String get reactionLaugh;
+
+  /// No description provided for @reactionWow.
+  ///
+  /// In en, this message translates to:
+  /// **'Wow'**
+  String get reactionWow;
+
+  /// No description provided for @reactionSad.
+  ///
+  /// In en, this message translates to:
+  /// **'Sad'**
+  String get reactionSad;
+
+  /// No description provided for @reactionAngry.
+  ///
+  /// In en, this message translates to:
+  /// **'Angry'**
+  String get reactionAngry;
 }
 
 class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {
@@ -267,7 +349,7 @@ class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en'].contains(locale.languageCode);
+      <String>['de', 'en', 'es', 'fr', 'pt'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_GvlCommentsL10nDelegate old) => false;
@@ -276,8 +358,16 @@ class _GvlCommentsL10nDelegate extends LocalizationsDelegate<GvlCommentsL10n> {
 GvlCommentsL10n lookupGvlCommentsL10n(Locale locale) {
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
+    case 'de':
+      return GvlCommentsL10nDe();
     case 'en':
       return GvlCommentsL10nEn();
+    case 'es':
+      return GvlCommentsL10nEs();
+    case 'fr':
+      return GvlCommentsL10nFr();
+    case 'pt':
+      return GvlCommentsL10nPt();
   }
 
   throw FlutterError(
