@@ -1,7 +1,7 @@
 # gvl_comments — Add comments to any Flutter app
 
 <p align="center">
-  <img src="screenshots/gvl_comments_demo.gif" alt="GVL Comments Flutter SDK demo — post, reply, react, dark mode" width="360" />
+  <img src="https://raw.githubusercontent.com/GoodVibesLab/gvl_comments/main/screenshots/gvl_comments_demo.gif" alt="GVL Comments Flutter SDK demo — post, reply, react, dark mode" width="360" />
 </p>
 
 <p align="center">

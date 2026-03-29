@@ -16,6 +16,9 @@ example/ios/.symlinks/
 # Tests (published separately)
 test/
 
+# Screenshots (GIF is 4 MB, too heavy for the package)
+screenshots/
+
 # CI / internal
 CLAUDE.md
 .github/
